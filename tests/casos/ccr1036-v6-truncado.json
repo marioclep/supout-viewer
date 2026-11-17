@@ -1,0 +1,21 @@
+{
+ "name": "ccr1036-v6-truncado",
+ "sections": [
+  {
+   "name": ".proc",
+   "text": "",
+   "truncated": true
+  }
+ ],
+ "expected": {
+  "model": null,
+  "version": null,
+  "trigger": "unknown",
+  "trigger_title": "No se pudo determinar qué generó este supout",
+  "crashes": [],
+  "events": [],
+  "general": [
+   "file-truncated"
+  ]
+ }
+}

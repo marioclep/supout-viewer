@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supout Viewer</title>
+<style>
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #1c1d1f; --muted: #6b6e74; --line: #e3e3de;
+  --accent: #2b5fd9; --code: #f1f1ec;
+  --critical: #c2261d; --critical-bg: #fde9e7; --high: #c45a10; --high-bg: #fdf0e4;
+  --medium: #9a7400; --medium-bg: #fbf4dc; --low: #1d7a8c; --low-bg: #e4f4f6; --info: #6b6e74; --info-bg: #efefeb;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141517; --panel: #1d1f22; --ink: #e8e8e4; --muted: #9a9ca1; --line: #2e3034;
+    --accent: #7ea2ff; --code: #17181a;
+    --critical: #ff7b72; --critical-bg: #3a1a18; --high: #f0a05a; --high-bg: #35251a;
+    --medium: #e3c35a; --medium-bg: #322c16; --low: #6cc7d6; --low-bg: #16302f; --info: #9a9ca1; --info-bg: #26282b;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+header.top { padding: 20px 24px 0; max-width: 1180px; margin: 0 auto; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.top h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+header.top .sub { color: var(--muted); font-size: 13px; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px 24px 60px; }
+#drop { border: 2px dashed var(--line); border-radius: 12px; padding: 34px 20px; text-align: center; color: var(--muted); background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s; }
+#drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+#drop strong { color: var(--ink); }
+#drop.compact { padding: 12px; font-size: 13px; }
+.tabs { display: flex; gap: 6px; margin: 18px 0 0; flex-wrap: wrap; }
+.tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 16px; }
+.card > h2, .h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+.device { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 20px; }
+.device div span { display: block; font-size: 12px; color: var(--muted); }
+.device div b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.verdict { border-left: 5px solid var(--critical); }
+.verdict.ok { border-left-color: var(--low); }
+.verdict .big { font-size: 19px; font-weight: 650; margin: 0 0 6px; letter-spacing: -.01em; }
+.verdict p { margin: 4px 0; }
+.finding { border-radius: 9px; padding: 10px 12px; margin: 8px 0; background: var(--info-bg); }
+.finding .t { font-weight: 600; }
+.finding .d { margin-top: 3px; font-size: 14px; }
+.finding .r { margin-top: 5px; font-size: 14px; }
+.finding .doc { margin-top: 5px; font-size: 13px; }
+.finding .doc a { color: var(--accent); text-decoration: none; }
+.finding .doc a:hover { text-decoration: underline; }
+.finding .r::before { content: "→ "; color: var(--muted); }
+.finding code, .r code { font-family: var(--mono); font-size: 12.5px; }
+.sev { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 1px 7px; border-radius: 99px; margin-right: 6px; vertical-align: 1px; color: #fff; }
+.sev-critical { background: var(--critical); } .f-critical { background: var(--critical-bg); }
+.sev-high { background: var(--high); } .f-high { background: var(--high-bg); }
+.sev-medium { background: var(--medium); } .f-medium { background: var(--medium-bg); }
+.sev-low { background: var(--low); } .f-low { background: var(--low-bg); }
+.sev-info { background: var(--info); } .f-info { background: var(--info-bg); }
+@media (prefers-color-scheme: dark) { .sev { color: #141517; } }
+.crash { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+.crash:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.crash h3 { margin: 0; font-size: 15px; }
+.meta { color: var(--muted); font-size: 13px; margin: 3px 0 6px; }
+.meta code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.rep { font-family: var(--mono); font-size: 12.5px; background: var(--code); border-radius: 6px; padding: 6px 9px; margin: 6px 0; overflow-x: auto; white-space: nowrap; }
+.rep b { color: var(--high); }
+details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 6px; }
+pre { font-family: var(--mono); font-size: 12px; line-height: 1.45; background: var(--code); border-radius: 8px; padding: 12px; overflow: auto; max-height: 520px; margin: 8px 0 0; white-space: pre; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+td, th { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+.browser { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+@media (max-width: 720px) { .browser { grid-template-columns: 1fr; } }
+.seclist { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.seclist button { display: flex; justify-content: space-between; width: 100%; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); text-align: left; padding: 6px 10px; font: 13px var(--mono); cursor: pointer; }
+.seclist button span { color: var(--muted); font-size: 11px; }
+.seclist button.on { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input[type=search] { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 14px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 7px 12px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.muted { color: var(--muted); font-size: 13px; }
+mark { background: #ffe066; color: #000; border-radius: 2px; }
+.empty { color: var(--muted); font-size: 14px; }
+.privacy { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Supout Viewer</h1>
+  <span class="sub">Diagnóstico de reinicios en archivos supout.rif / autosupout.rif de MikroTik RouterOS</span>
+</header>
+<main>
+  <div id="drop" tabindex="0" role="button">
+    <strong>Arrastrá uno o más archivos .rif acá</strong> o hacé clic para elegirlos
+    <input id="file" type="file" accept=".rif" multiple hidden>
+  </div>
+  <div class="privacy">Todo se procesa en este navegador. Los archivos no se suben a ningún lado.</div>
+  <div class="tabs" id="tabs"></div>
+  <div id="out"></div>
+</main>
+
+<script>
+// Motor de análisis del visor: equivalente en JS de supout.py (mismas reglas, rules.json).
+// No depende del DOM; expone SupoutEngine.{decodeFile, analyze}.
+var SupoutEngine = (function () {
+  var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  var IDX = {};
+  for (var i = 0; i < B64.length; i++) IDX[B64[i]] = i;
+  var SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
+
+  function mtB64decode(s) {
+    s = s.replace(/\s/g, "");
+    var out = new Uint8Array(Math.floor(s.length / 4) * 3 + 3), p = 0;
+    for (var i = 0; i < s.length; i += 4) {
+      var o = 0, n = 0;
+      for (var j = 0; j < 4 && i + j < s.length; j++) {
+        var c = s[i + j];
+        if (c === "=") break;
+        o += IDX[c] * Math.pow(2, 6 * j); // evita overflow de bits en 32 bits con signo
+        n++;
+      }
+      var nb = n === 2 ? 1 : n === 3 ? 2 : n === 4 ? 3 : 0;
+      for (var k = 0; k < nb; k++) out[p++] = Math.floor(o / Math.pow(2, 8 * k)) & 0xff;
+    }
+    return out.subarray(0, p);
+  }
+
+  // inflate: async (Uint8Array) -> {data, complete}. En el navegador usa DecompressionStream y,
+  // si el flujo zlib está cortado, devuelve lo que alcanzó a descomprimir.
+  async function browserInflate(bytes) {
+    var ds = new DecompressionStream("deflate"), w = ds.writable.getWriter();
+    w.write(bytes).catch(function () {});
+    w.close().catch(function () {});
+    var reader = ds.readable.getReader(), chunks = [], size = 0, complete = true;
+    try {
+      for (;;) {
+        var r = await reader.read();
+        if (r.done) break;
+        chunks.push(r.value); size += r.value.length;
+      }
+    } catch (e) { complete = false; }
+    if (!complete && !size) throw new Error("no es zlib");
+    var out = new Uint8Array(size), p = 0;
+    chunks.forEach(function (c) { out.set(c, p); p += c.length; });
+    return { data: out, complete: complete };
+  }
+
+  var BEGIN = "--BEGIN ROUTEROS SUPOUT SECTION", END = "--END ROUTEROS SUPOUT SECTION";
+
+  async function decodeFile(text, inflate, onProgress) {
+    inflate = inflate || browserInflate;
+    var blocks = text.split(BEGIN).slice(1), sections = [];
+    var dec = new TextDecoder("utf-8");
+    for (var i = 0; i < blocks.length; i++) {
+      var complete = blocks[i].indexOf(END) >= 0;
+      var raw = mtB64decode(blocks[i].split(END)[0]);
+      var nul = raw.indexOf(0);
+      if (nul < 0) continue;
+      var name = String.fromCharCode.apply(null, raw.subarray(0, nul));
+      var data = raw.subarray(nul + 1), truncated = !complete;
+      try {
+        var res = await inflate(data);
+        data = res.data; truncated = truncated || (!res.complete && data.length > 0);
+      } catch (e) { /* sin comprimir o ilegible: se deja tal cual */ }
+      sections.push({ name: name, text: dec.decode(data).replace(/\r\n/g, "\n"), truncated: truncated });
+      if (onProgress) onProgress(i + 1, blocks.length, name);
+    }
+    if (!sections.length) throw new Error("No se encontraron secciones: ¿es un archivo supout.rif?");
+    return sections;
+  }
+
+  // ------------------------------------------------------------ parsers
+  function first(re, text, def) {
+    var m = re.exec(text || "");
+    return m ? m[1].trim() : (def === undefined ? null : def);
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function fmtUptime(sec) {
+    var s = Math.floor(sec), d = Math.floor(s / 86400); s %= 86400;
+    var h = Math.floor(s / 3600); s %= 3600;
+    var mi = Math.floor(s / 60); s %= 60;
+    return (d ? d + "d " : "") + pad(h) + ":" + pad(mi) + ":" + pad(s);
+  }
+
+  function parseRosUptime(s) {
+    if (!s) return null;
+    var units = { w: 604800, d: 86400, h: 3600, m: 60, s: 1 }, re = /(\d+)([wdhms])/g, m, tot = 0, any = false;
+    while ((m = re.exec(s))) { tot += parseInt(m[1], 10) * units[m[2]]; any = true; }
+    return any ? tot : null;
+  }
+
+  function normalizeExport(text) {
+    var lines = [], buf = "";
+    (text || "").split("\n").forEach(function (line) {
+      if (/\\$/.test(line)) { buf += line.slice(0, -1).trim() + " "; return; }
+      lines.push(buf ? buf + line.trim() : line); buf = "";
+    });
+    var out = [], cur = "";
+    lines.forEach(function (line) {
+      if (line[0] === "/") { cur = line.trim(); out.push(cur); }
+      else if (line.trim() && line.trim()[0] !== "#") out.push(cur + " " + line.trim());
+    });
+    return out.join("\n");
+  }
+
+  function parseCrashes(oops) {
+    var parts = (oops || "").split(/^--- (\d+)[ \t]*$/m), crashes = [];
+    for (var i = 1; i < parts.length; i += 2) {
+      var body = parts[i + 1].replace(/^--- rebooted[ \t]*$/mg, "").trim();
+      var stamps = [], sm, sre = /^(?:DUMP: )?\[\s*(\d+\.\d+)\]/mg;
+      while ((sm = sre.exec(body))) stamps.push(parseFloat(sm[1]));
+      var msgs = {};
+      body.split("\n").forEach(function (line) {
+        var msg = line.replace(/^(?:DUMP: )?(?:\[[^\]]*\](?:\[[^\]]*\])?\s*)?(?:<\d>)?\s*/, "").trim();
+        if (msg && msg.indexOf("_stext") !== 0) msgs[msg] = (msgs[msg] || 0) + 1;
+      });
+      var funcs = [], fm, fre = /\b([A-Za-z_]\w*)\+0x[0-9a-f]+\/0x[0-9a-f]+/g;
+      while ((fm = fre.exec(body))) if (fm[1] !== "_stext" && funcs.indexOf(fm[1]) < 0) funcs.push(fm[1]);
+      var mods = {}, mm, mre = /\[(\w+)@0x/g;
+      while ((mm = mre.exec(body))) mods[mm[1]] = 1;
+      var repeated = Object.keys(msgs).map(function (k) { return { msg: k, count: msgs[k] }; })
+        .filter(function (x) { return x.count >= 3; })
+        .sort(function (a, b) { return b.count - a.count; }).slice(0, 3);
+      crashes.push({
+        index: parseInt(parts[i], 10),
+        version: first(/^v(\S+)/m, body),
+        time: first(/^v\S+ .* at (\S+)/m, body),
+        uptime: stamps.length ? fmtUptime(stamps[stamps.length - 1]) : null,
+        panic: first(/Kernel panic - not syncing: (.*)$/m, body),
+        process: first(/(?:stuck for \d+s! \[|Comm: |comm:\s+)([^\]\s,]+)/m, body),
+        functions: funcs.slice(0, 6),
+        workqueue: first(/Workqueue: \S+ (\S+)/m, body),
+        modules: Object.keys(mods).sort(),
+        repeated: repeated,
+        text: body
+      });
+    }
+    return crashes;
+  }
+
+  function parseBacktraces(bt) {
+    var events = [], re = /^---- (\w+) v(\S+) (.+?) ----[ \t]*$/mg, heads = [], m;
+    bt = bt || "";
+    while ((m = re.exec(bt))) heads.push({ m: m, start: m.index, end: re.lastIndex });
+    heads.forEach(function (h, i) {
+      var body = bt.slice(h.end, i + 1 < heads.length ? heads[i + 1].start : bt.length).trim();
+      if (!body) return;
+      var starts = [], sm, sre = /^\S+@\d+: (?:\/\S+|WinBox|had panic)[ \t]*$/mg;
+      while ((sm = sre.exec(body))) starts.push(sm.index);
+      if (!starts.length) starts = [0];
+      starts[0] = 0;
+      starts.forEach(function (st, k) {
+        var text = body.slice(st, k + 1 < starts.length ? starts[k + 1] : body.length).trim();
+        events.push({ boot: h.m[1], version: h.m[2], time: first(/^(\S+?)(?:\.\d+)?@/m, text), text: text });
+      });
+    });
+    return events;
+  }
+
+  // Varios volcados con la misma hora exacta: son reinicios distintos pero la fecha no es real.
+  function sameTimeFindings(crashes) {
+    var counts = {}, order = [];
+    crashes.forEach(function (c) {
+      if (!c.time) return;
+      if (!(c.time in counts)) { counts[c.time] = 0; order.push(c.time); }
+      counts[c.time]++;
+    });
+    return order.filter(function (t) { return counts[t] >= 2; }).map(function (t) {
+      return { id: "crash-same-time", severity: "medium",
+        title: counts[t] + " crashes del kernel con la misma hora exacta (" + t + ")",
+        detail: "Son reinicios distintos (cada volcado termina en su propio «rebooted»), pero quedaron con la misma " +
+          "marca de tiempo. La hora sale del reloj del equipo, y si no estaba en hora (por ejemplo, antes de " +
+          "sincronizar por NTP) la fecha no es real. Contalos como reinicios separados de fecha desconocida.",
+        recommend: "Verificar que NTP esté configurado (`/system ntp client`). Para saber cuándo ocurrieron, cruzar con el monitoreo externo (caídas de ping, sesiones BGP o PPP).",
+        doc: "https://manual.mikrotik.com/docs/cli-reference/system/ntp/client.md" };
+    });
+  }
+
+  // Muchos procesos distintos caídos: apunta a una causa común (versión, memoria, almacenamiento).
+  function manyProcessesFindings(events) {
+    var names = [];
+    events.forEach(function (e) {
+      var n = first(/@\d+: \/\S*?([^\/\s]+)\s*\n[^\n]*--- signal=/, e.text);
+      if (n && names.indexOf(n) < 0) names.push(n);
+    });
+    if (names.length < 5) return [];
+    return [{ id: "many-processes", severity: "medium",
+      title: "Se cayeron " + names.length + " procesos distintos (" + names.join(", ") + ")",
+      detail: "Cuando fallan muchos procesos distintos, y no siempre el mismo, lo más probable es una causa común y no un bug de cada proceso: errores de la versión de RouterOS corregidos más adelante, falta de memoria o, menos seguido, almacenamiento o RAM con fallas.",
+      recommend: "Actualizar a la última versión long-term. Si sigue pasando, verificar el almacenamiento con `/system check-installation` y revisar la memoria libre.",
+      doc: "https://manual.mikrotik.com/docs/cli-reference/system/check-installation.md" }];
+  }
+
+  var REBOOT_WINDOW = 1800;
+  function supoutTrigger(device, crashes, events, logFindings) {
+    var up = parseRosUptime(device.uptime), sEp = supoutEpoch(device);
+    var latest = function (list) { return list.reduce(function (a, b) { return (b.time || "") > (a.time || "") ? b : a; }); };
+    var cur = events.filter(function (e) { return e.boot === "current" && e.findings && e.findings.length; });
+    var procs = cur.filter(function (e) { return e.findings[0].id.indexOf("bt-process") === 0; });
+    var near = cur.filter(function (e) {
+      var ep = eventEpoch(e.time);
+      return sEp != null && ep != null && sEp - ep >= 0 && sEp - ep <= TRIGGER_LAG;
+    });
+    var trig = near.length ? latest(near) : null, lag = trig ? sEp - eventEpoch(trig.time) : null, fromDebug = false;
+    if (up == null) {
+      trig = cur.filter(function (e) { return e.debug_last; })[0] || null;
+      fromDebug = !!trig;
+      if (!trig && procs.length) trig = latest(procs);
+      if (!trig) return { kind: "unknown", title: "No se pudo determinar qué generó este supout",
+        detail: "Falta la sección resource (uptime) y no hay un crash reciente registrado." };
+    } else if (up <= REBOOT_WINDOW) {
+      var extra = "";
+      if (trig && trig.findings[0].id !== "bt-panic")
+        extra = " El autosupout en sí lo escribió un evento posterior al arranque, " + lag + " s antes del supout: " +
+          trig.findings[0].title + ".";
+      if (crashes.length) return { kind: "kernel-crash", title: "Reinicio por un crash del kernel",
+        detail: "El supout se generó con " + device.uptime + " de uptime, justo después de arrancar, e incluye el volcado del crash." + extra };
+      if (logFindings.some(function (f) { return f.id === "log-unclean"; })) return { kind: "unclean",
+        title: "Reinicio sin apagado ordenado y sin crash del kernel registrado",
+        detail: "No hay volcado en la sección oops. Suele indicar un corte de energía, un reset por hardware o un cuelgue que no alcanzó a registrarse." + extra };
+      if (!extra) return { kind: "boot", title: "Supout generado poco después de un arranque, sin crash registrado",
+        detail: "Uptime " + device.uptime + ". Puede ser un reinicio ordenado o un supout generado a mano." };
+    } else if (!trig) {
+      if (procs.length && sEp != null) {
+        var lp = latest(procs);
+        return { kind: "manual", title: "El router no se reinició y no se encontró el evento que generó el supout",
+          detail: "Llevaba " + device.uptime + " encendido. La última caída de un proceso en este arranque " +
+            "(" + lp.findings[0].title + ", " + lp.time + ") fue bastante antes del supout, así que no lo " +
+            "explica. Puede haberse generado a mano (/system/sup-output) o por un evento que no quedó registrado." };
+      }
+      if (procs.length) {
+        var last = latest(procs);
+        return { kind: "process", title: "El router no se reinició: " + last.findings[0].title,
+          detail: "Llevaba " + device.uptime + " encendido. Cuando un proceso de RouterOS se cae, el sistema lo vuelve a " +
+            "levantar y guarda un autosupout sin reiniciar el equipo. Última caída: " + last.time + ".", event_time: last.time };
+      }
+      return { kind: "manual", title: "El router no se reinició y no hay un crash que explique el supout",
+        detail: "Llevaba " + device.uptime + " encendido. Probablemente se generó a mano (/system/sup-output)." };
+    }
+
+    var f = trig.findings[0], prefix, head, when;
+    if (up == null) {
+      prefix = "Probablemente: ";
+      head = "No se pudo leer el uptime (falta la sección resource), así que no se sabe si el equipo se reinició. ";
+      when = fromDebug ? "Según el registro interno (.debug), es el último crash que procesó RouterOS (" + trig.time + ")."
+        : "Es la última caída registrada en el arranque actual (" + trig.time + ").";
+    } else if (up <= REBOOT_WINDOW) {
+      prefix = "";
+      head = "Llevaba " + device.uptime + " encendido: el equipo había arrancado hacía poco, sin crash registrado, " +
+        "pero el supout no salió del arranque. ";
+      when = "Se escribió " + lag + " s después (" + trig.time + ").";
+    } else {
+      prefix = "El router no se reinició: ";
+      head = "Llevaba " + device.uptime + " encendido. ";
+      when = "Se escribió " + lag + " s después (" + trig.time + ").";
+    }
+    if (f.id === "bt-winbox") {
+      var wb = first(/winbox version: ?(\S+)/, trig.text) || "";
+      return { kind: "winbox", title: prefix + (prefix ? "lo" : "Lo") + " generó un crash de WinBox en una PC",
+        detail: head + "El autosupout salió del reporte de un crash de WinBox " + wb + " enviado desde una PC. " + when, event_time: trig.time };
+    }
+    if (f.id.indexOf("bt-process") === 0) return { kind: "process", title: prefix + f.title,
+      detail: head + "Cuando un proceso de RouterOS se cae, el sistema lo vuelve a levantar y guarda un " +
+        "autosupout sin reiniciar el equipo. " + when, event_time: trig.time };
+    if (f.id === "bt-panic" && up == null) return { kind: "kernel-crash", title: "Probablemente: reinicio por un crash del kernel",
+      detail: head + "El último evento que procesó RouterOS fue un kernel panic. " + when };
+    return { kind: "manual", title: "No se pudo determinar qué generó este supout", detail: head.trim() };
+  }
+
+  // El bloque @backtrace@ de .debug guarda el último crash que procesó RouterOS (el que generó el autosupout).
+  // Devuelve [hora, texto] o null. Si todavía no llegó a la sección backtrace, se agrega como evento pendiente.
+  function debugBacktrace(debug) {
+    var m = /^@backtrace@[ \t]*\n([\s\S]*?)(?=^@[\w.-]+@[ \t]*$|(?![\s\S]))/m.exec(debug || "");
+    if (!m || !/backtrace: 0x|had panic|WinBox|--- signal=/.test(m[1])) return null;
+    var text = m[1].trim();
+    var t = first(/^(\d{4}\.\d\d\.\d\d-\d\d:\d\d:\d\d)/m, text);
+    return t ? [t, text] : null;
+  }
+
+  function deviceInfo(sec) {
+    var res = sec.resource || "", rb = sec.routerboard || "", exp = sec["export"] || "", ppp = sec.ppp;
+    var join = function (arr, sep) { var a = arr.filter(Boolean); return a.length ? a.join(sep) : null; };
+    return {
+      identity: first(/^\/system identity\s*\nset name="?([^"\n]+)/m, exp),
+      model: first(/^\s*model: (.+)$/m, rb) || first(/^\s*board-name: (.+)$/m, res),
+      serial: first(/^\s*serial-number: (.+)$/m, rb),
+      version: first(/^\s*version: (.+)$/m, res),
+      firmware: first(/^\s*current-firmware: (.+)$/m, rb),
+      uptime: first(/^\s*uptime: (\S+)/m, res),
+      date: join([first(/^\s*date: (\S+)/m, res), first(/^\s*time: (\S+)/m, res)], " "),
+      timezone: first(/^\s*time-zone-name: (\S+)/m, res),
+      gmt_offset: first(/^\s*gmt-offset: ([+-]\d\d:\d\d)/m, res),
+      memory: join([first(/^\s*free-memory: (\S+)/m, res), first(/^\s*total-memory: (\S+)/m, res)], " / "),
+      cpu: join([first(/^\s*cpu-count: (\S+)/m, res), "x", first(/^\s*cpu-frequency: (\S+)/m, res)], " "),
+      ppp_active: ppp ? (ppp.match(/^\s*\d+\s+\S*\s*name=/mg) || []).length : null
+    };
+  }
+
+  // ------------------------------------------------------------ reglas
+  function fill(tpl, count, groups) {
+    return (tpl || "").replace(/\{(count|\d+)\}/g, function (_, k) {
+      if (k === "count") return String(count);
+      var i = parseInt(k, 10);
+      return i < groups.length && groups[i] != null ? groups[i] : "";
+    });
+  }
+
+  function versionKey(v) { return ((v || "").match(/\d+/g) || []).map(Number); }
+  function versionLess(a, b) {
+    for (var i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] < b[i];
+    return a.length < b.length;
+  }
+
+  var MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  // Hora UTC (epoch, en segundos) en que se generó el supout, a partir de date/time y gmt-offset de resource.
+  function supoutEpoch(device) {
+    var d = device.date || "", y, mo, day, hh, mi, ss;
+    var m = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)$/.exec(d);
+    if (m) { y = +m[1]; mo = +m[2]; day = +m[3]; hh = +m[4]; mi = +m[5]; ss = +m[6]; }
+    else {
+      m = /^([a-z]{3})\/(\d\d)\/(\d{4}) (\d\d):(\d\d):(\d\d)$/.exec(d.toLowerCase());
+      if (!m || MONTHS.indexOf(m[1]) < 0) return null;
+      mo = MONTHS.indexOf(m[1]) + 1; day = +m[2]; y = +m[3]; hh = +m[4]; mi = +m[5]; ss = +m[6];
+    }
+    var off = /^([+-])(\d\d):(\d\d)$/.exec(device.gmt_offset || "");
+    if (!off) return null;
+    var sign = off[1] === "-" ? -1 : 1;
+    return Date.UTC(y, mo - 1, day, hh, mi, ss) / 1000 - sign * (+off[2] * 3600 + +off[3] * 60);
+  }
+  // '2026.05.29-10:45:58' (UTC, como en backtrace) → epoch.
+  function eventEpoch(t) {
+    var m = /^(\d{4})\.(\d\d)\.(\d\d)-(\d\d):(\d\d):(\d\d)$/.exec(t || "");
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000 : null;
+  }
+  var TRIGGER_LAG = 300; // el autosupout se escribe segundos después del evento que lo genera
+
+  function applyRule(rule, text, fired) {
+    if (rule.requires && !rule.requires.some(function (r) { return fired[r]; })) return null;
+    var flags = "m" + (rule.icase ? "i" : ""), m0 = null, count = 0;
+    for (var i = 0; i < rule.match.length; i++) {
+      var m = new RegExp(rule.match[i], flags).exec(text);
+      if (!m) return null;
+      if (i === 0) { m0 = m; count = (text.match(new RegExp(rule.match[i], flags + "g")) || []).length; }
+    }
+    if ((rule.not || []).some(function (p) { return new RegExp(p, flags).test(text); })) return null;
+    if (rule.version_lt) {
+      var va = versionKey(m0[rule.version_lt[0]]), vb = versionKey(m0[rule.version_lt[1]]);
+      if (!versionLess(va, vb)) return null;
+    }
+    if (count < (rule.min_count || 1)) return null;
+    if (rule.min_ratio && count / Math.max(1, text.split("\n").filter(function (l) { return l.trim(); }).length) < rule.min_ratio) return null;
+    var groups = Array.prototype.slice.call(m0);
+    return {
+      id: rule.id, severity: rule.severity,
+      title: fill(rule.title, count, groups),
+      detail: fill(rule.detail, count, groups),
+      recommend: fill(rule.recommend, count, groups),
+      doc: rule.doc || null
+    };
+  }
+
+  function runRules(rules, scope, targets, fired) {
+    return targets.map(function (text) {
+      var found = [], used = {};
+      rules.filter(function (r) { return r.scope === scope; }).forEach(function (rule) {
+        if (rule.group && used[rule.group]) return;
+        var f = applyRule(rule, text, fired);
+        if (f) { found.push(f); fired[f.id] = true; if (rule.group) used[rule.group] = true; }
+      });
+      return found;
+    });
+  }
+
+  function analyze(fileName, sections, rules) {
+    var sec = {};
+    sections.forEach(function (s) { if (!(s.name in sec)) sec[s.name] = s.text; });
+    var fired = {};
+    var crashes = parseCrashes(sec.oops);
+    runRules(rules, "crash", crashes.map(function (c) { return c.text; }), fired)
+      .forEach(function (f, i) { crashes[i].findings = f; });
+    var bts = parseBacktraces(sec.backtrace);
+    var dbt = debugBacktrace(sec[".debug"]);
+    if (dbt) {
+      var same = bts.filter(function (e) { return e.time === dbt[0]; });
+      if (same.length) same[same.length - 1].debug_last = true;
+      else bts.push({ boot: "current", version: first(/^\s*version: (\S+)/m, sec.resource || "") || "?",
+        time: dbt[0], text: dbt[1], pending: true, debug_last: true });
+    }
+    runRules(rules, "backtrace", bts.map(function (b) { return b.text; }), fired)
+      .forEach(function (f, i) { bts[i].findings = f; });
+    var logF = runRules(rules, "log", [sec.log || ""], fired)[0]
+      .concat(runRules(rules, "debug", [sec[".debug"] || ""], fired)[0])
+      .concat(runRules(rules, "oops", [sec.oops || ""], fired)[0]);
+    var device = deviceInfo(sec);
+    if (!device.version) { // archivo incompleto: tomar la versión del arranque actual en backtrace
+      var cv = bts.filter(function (e) { return e.boot === "current" && !e.pending; })[0];
+      device.version = cv ? cv.version : null;
+    }
+    var general = sections.filter(function (s) { return s.truncated; }).map(function (s) {
+      return { id: "file-truncated", severity: "high", title: "Archivo incompleto: se corta en la sección «" + s.name + "»",
+        detail: "Faltan las secciones siguientes (log, configuración, etc.). Pasa si el router se reinició o se quedó " +
+          "sin memoria mientras generaba el archivo, o si la descarga/copia quedó incompleta. " +
+          "Se analizó lo que se pudo recuperar.",
+        recommend: "Si el archivo original en el router está completo, volver a descargarlo.", doc: null };
+    });
+    general = general.concat(runRules(rules, "routerboard", [sec.routerboard || ""], fired)[0]);
+    if (sections.length && !sections.some(function (x) { return x.truncated; }) && !("resource" in sec))
+      general.push({ id: "file-truncated", severity: "high",
+        title: "Archivo incompleto: termina después de la sección «" + sections[sections.length - 1].name + "»",
+        detail: "Faltan las secciones siguientes (resource, log, configuración, etc.), así que no hay datos del " +
+          "equipo ni uptime. Pasa si el router se reinició o se quedó sin memoria mientras generaba el " +
+          "archivo, o si la descarga/copia quedó incompleta. Se analizó lo que se pudo recuperar.",
+        recommend: "Si el archivo original en el router está completo, volver a descargarlo.", doc: null });
+    general = general.concat(sameTimeFindings(crashes));
+    general = general.concat(manyProcessesFindings(bts));
+    var cfgF = runRules(rules, "export", [normalizeExport(sec["export"])], fired)[0];
+    var bySev = function (a, b) { return SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity); };
+    return {
+      file: fileName,
+      device: device,
+      trigger: supoutTrigger(device, crashes, bts, logF),
+      general_findings: general,
+      crashes: crashes,
+      backtraces: bts,
+      log_findings: logF,
+      config_findings: cfgF.sort(bySev),
+      critical_log: (sec.log || "").split("\n").filter(function (l) {
+        return /,(critical|error)\b/.test(l) && l.indexOf("pppoe") < 0;
+      }).slice(0, 50),
+      health: (sec.health || "").trim(),
+      sections: sections
+    };
+  }
+
+  return { decodeFile: decodeFile, analyze: analyze, normalizeExport: normalizeExport, SEVERITY_ORDER: SEVERITY_ORDER };
+})();
+if (typeof module !== "undefined") module.exports = SupoutEngine;
+
+</script>
+<script>
+var RULES = {"_doc": "Reglas de diagnóstico compartidas por supout.py y supout-viewer.html. scope: crash (cada evento de la sección oops), backtrace (cada bloque), log, debug (sección .debug), export (config normalizada: '/ruta add|set ...' por línea), routerboard (sección routerboard; los hallazgos van a los generales), oops (la sección oops entera; los hallazgos van a Log y registros). match: todas deben coincidir; not: ninguna debe coincidir; group: dentro de un mismo objetivo solo gana la primera regla del grupo; requires: solo aplica si se disparó alguna de esas reglas; min_count: mínimo de apariciones del primer patrón. Placeholders: {count}, {1}, {2}... (grupos del primer patrón). Usar regex compatibles Python/JS. doc: URL opcional al manual de MikroTik. min_ratio: fracción mínima de líneas del texto que deben coincidir con el primer patrón. version_lt: [a, b] — solo aplica si la versión del grupo a es menor que la del grupo b del primer patrón.", "rules": [{"id": "masquerade-conntrack-lockup", "scope": "crash", "group": "cause", "severity": "critical", "match": ["CPU#(\\d+) stuck for (\\d+)s! \\[([^\\]]+)\\]", "nf_ct_iterate_cleanup", "ipt_MASQUERADE", "__inet_del_ifa"], "title": "CPU {1} bloqueada {2}s limpiando conexiones de masquerade", "detail": "Cuando una interfaz pierde su IP (por ejemplo, al cerrarse una sesión PPP), RouterOS borra de la tabla de conexiones todas las que pasaron por masquerade en esa interfaz, y para eso recorre la tabla entera. Con la tabla muy grande o llena y muchas desconexiones juntas, esa limpieza tuvo una CPU ocupada más de 20 s y el detector de bloqueos del kernel forzó el panic. No fue el watchdog de RouterOS.", "recommend": "En las reglas NAT con IP pública fija, usar `action=src-nat to-addresses=...` en lugar de `masquerade`: así no se dispara la limpieza al caer una interfaz. Además, achicar la tabla de conexiones (timeouts más cortos, descartar conexiones invalid) y revisar si hubo un pico de conexiones.", "doc": "https://manual.mikrotik.com/docs/firewall-and-quality-of-service/firewall/nat.md"}, {"id": "ppp-netdev-lockup", "scope": "crash", "group": "cause", "severity": "critical", "match": ["unregister_netdevice: waiting for (<?ppp[^\\s>]*>?) to become free\\. Usage count = (\\d+)", "soft lockup|rcu_sched self-detected stall|hung task"], "title": "Bloqueo del kernel al liberar una interfaz PPP ({1})", "detail": "Al cerrarse una sesión, el kernel intentó eliminar la interfaz {1}, pero algo seguía usándola (usage count = {2}). El proceso de ppp_generic quedó esperando, una CPU se bloqueó más de 20 s y el kernel hizo panic y reinició el equipo. No fue el watchdog de RouterOS (/system/watchdog): fue el detector de bloqueos del propio kernel, que provoca un kernel panic, y RouterOS guarda el volcado en el autosupout.", "recommend": "Abrir un ticket con MikroTik adjuntando este supout. Bajar la rotación de sesiones PPPoE (ver avisos de RADIUS). Revisar qué funciones quedan asociadas a interfaces PPP (IPv6/DHCPv6-PD, BFD, sniffer/torch, traffic-flow) y probar otra rama de RouterOS (long-term).", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "netdev-lockup", "scope": "crash", "group": "cause", "severity": "critical", "match": ["unregister_netdevice: waiting for (\\S+) to become free\\. Usage count = (\\d+)"], "title": "Bloqueo del kernel al liberar la interfaz {1}", "detail": "El kernel no pudo eliminar la interfaz {1} porque seguía en uso (usage count = {2}). Quedó esperando hasta que el watchdog forzó el reinicio. No fue el watchdog de RouterOS (/system/watchdog): fue el detector de bloqueos del propio kernel, que provoca un kernel panic, y RouterOS guarda el volcado en el autosupout.", "recommend": "Abrir un ticket con MikroTik adjuntando el supout. Revisar qué configuración hace referencia a esa interfaz.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "oom", "scope": "crash", "group": "cause", "severity": "critical", "match": ["invoked oom-killer|Out of memory"], "title": "Sin memoria (OOM)", "detail": "El kernel se quedó sin memoria RAM y empezó a matar procesos.", "recommend": "Revisar consumo de memoria (address-lists, conexiones, colas, contenedores) y la sección resource/.proc.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "hard-lockup", "scope": "crash", "group": "cause", "severity": "critical", "match": ["hard LOCKUP"], "title": "Hard lockup de CPU", "detail": "Una CPU dejó de responder incluso a interrupciones. Puede ser un problema de hardware o un bug grave del kernel.", "recommend": "Revisar temperatura y alimentación (sección health). Abrir un ticket con MikroTik.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "kernel-memfault", "scope": "crash", "group": "cause", "severity": "critical", "match": ["Unable to handle kernel (NULL pointer dereference|paging request)"], "title": "Fallo de acceso a memoria en el kernel ({1})", "detail": "El kernel accedió a una dirección inválida. Es un bug del kernel o de un driver.", "recommend": "Fijarse en el módulo de la traza de llamadas, abrir un ticket con MikroTik y probar otra versión.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "soft-lockup", "scope": "crash", "group": "cause", "severity": "high", "match": ["soft lockup - CPU#(\\d+) stuck for (\\d+)s! \\[([^\\]]+)\\]"], "title": "CPU {1} bloqueada {2}s (proceso {3})", "detail": "Un proceso del kernel monopolizó la CPU y el detector de bloqueos del kernel forzó el panic. No fue el watchdog de RouterOS (/system/watchdog): fue el detector de bloqueos del propio kernel, que provoca un kernel panic, y RouterOS guarda el volcado en el autosupout.", "recommend": "Fijarse en el módulo de la traza de llamadas y abrir un ticket con MikroTik.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "hung-task", "scope": "crash", "group": "cause", "severity": "high", "match": ["blocked for more than (\\d+) seconds"], "title": "Tarea del kernel bloqueada más de {1}s", "detail": "Un proceso quedó esperando un recurso que nunca se liberó.", "recommend": "Revisar la traza de llamadas. Suele relacionarse con almacenamiento o drivers.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "kernel-bug", "scope": "crash", "group": "cause", "severity": "high", "match": ["(Internal error: Oops[^\\n]*|kernel BUG at[^\\n]*|BUG: [^\\n]*)"], "title": "Error interno del kernel", "detail": "{1}", "recommend": "Abrir un ticket con MikroTik adjuntando el supout.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "tilera-sched-udivdi3", "scope": "crash", "group": "cause", "severity": "critical", "match": ["Kernel took bad trap \\d+ \\(([^)]+)\\) at PC \\S+ __udivdi3", "find_busiest_group"], "title": "Crash del scheduler del kernel (__udivdi3 en find_busiest_group)", "detail": "El kernel falló ({1}) haciendo una división dentro de find_busiest_group, la parte del scheduler que reparte la carga entre CPUs. No apunta a ninguna función de red ni a la configuración. Es la misma firma en dos CCR1036 distintos con v6 (Tilera), así que es un bug del kernel de esa plataforma y no algo de este equipo en particular.", "recommend": "Actualizar a la última v6 long-term o pasar a v7 (los CCR1036 la soportan, con su kernel nuevo). Si se repite en una versión actual, abrir un ticket con MikroTik adjuntando el supout.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "kernel-bad-trap", "scope": "crash", "group": "cause", "severity": "critical", "match": ["Kernel took bad trap (\\d+) \\(([^)]+)\\) at PC \\S+ ([A-Za-z_]\\w*)"], "title": "Excepción del kernel: {2} en {3}", "detail": "El kernel ejecutó una operación inválida ({2}) dentro de la función {3} y se detuvo. Es el formato de crash de los CCR con CPU Tilera (RouterOS v6/v7). Mirá las funciones de la traza para ver qué subsistema estaba activo.", "recommend": "Si se repite, abrir un ticket con MikroTik adjuntando el supout. Si ocurrió en una versión vieja y no volvió a pasar, probablemente ya esté corregido.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "panic-generic", "scope": "crash", "group": "cause", "severity": "high", "match": ["Kernel panic - not syncing: ([^\\n]*)"], "title": "Kernel panic: {1}", "detail": "El kernel entró en panic. Ninguna regla específica reconoció la causa.", "recommend": "Revisar el detalle crudo del evento.", "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"}, {"id": "bt-winbox", "scope": "backtrace", "group": "kind", "severity": "info", "match": ["winbox version: ?(\\S+)"], "title": "Crash de WinBox {1} en una PC (no afecta al router)", "detail": "El cliente WinBox se colgó en una PC con Windows y envió el reporte al router. No es un reinicio del equipo.", "recommend": "Actualizar WinBox si se repite."}, {"id": "bt-panic", "scope": "backtrace", "group": "kind", "severity": "info", "match": ["had panic"], "title": "Marca de kernel panic", "detail": "Hubo un kernel panic. El detalle está en los eventos de crash (sección oops).", "recommend": ""}, {"id": "bt-process-loader", "scope": "backtrace", "group": "kind", "severity": "high", "match": ["@\\d+: (/\\S*?(loader))\\s*\\n[^\\n]*--- signal=(\\d+)"], "title": "Se cayó «loader», el proceso que supervisa a los demás (señal {3})", "detail": "loader arranca y vigila al resto de los procesos de RouterOS. Cuando se cae, arrastra a los demás: los otros crashes registrados en el mismo segundo (casi siempre con señal 6, abort) son consecuencia de esta caída y no fallas independientes.", "recommend": "Tomarlo como una falla de todo el sistema. Revisar la memoria libre en ese momento y actualizar RouterOS; si se repite en la versión actual, abrir un ticket con MikroTik adjuntando el supout."}, {"id": "bt-process-graphing", "scope": "backtrace", "group": "kind", "severity": "medium", "match": ["@\\d+: (/\\S*?(graphing))\\s*\\n[^\\n]*--- signal=(\\d+)"], "title": "El proceso «graphing» se cayó (señal {3})", "detail": "graphing es el proceso que genera los gráficos de /tool/graphing (tráfico, CPU, colas). Su caída no reinicia el router, pero cada caída genera un autosupout nuevo y rota el anterior a autosupout.old.rif, con lo que puede pisar el de un reinicio real.", "recommend": "Si no usás los gráficos, quitar las reglas de `/tool/graphing` (interface, queue, resource). Si se repite en la última versión, reportarlo a MikroTik.", "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/graphing.md"}, {"id": "bt-process-graphing-logtail", "scope": "backtrace", "group": "kind", "severity": "medium", "match": ["backtrace: 0x", "(?:writeChangesToStore|IFACE UPDATE)"], "not": ["@\\d+: /\\S+\\s*\\n[^\\n]*--- signal="], "title": "El proceso «graphing» se cayó", "detail": "graphing es el proceso que genera los gráficos de /tool/graphing (tráfico, CPU, colas). Su caída no reinicia el router, pero cada caída genera un autosupout nuevo y rota el anterior a autosupout.old.rif, con lo que puede pisar el de un reinicio real. Se lo identificó por su registro interno (writeChangesToStore, IFACE UPDATE): el encabezado del crash, con el nombre del proceso y la señal, no quedó en el archivo.", "recommend": "Si no usás los gráficos, quitar las reglas de `/tool/graphing` (interface, queue, resource). Si se repite en la última versión, reportarlo a MikroTik.", "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/graphing.md"}, {"id": "bt-process-ssh", "scope": "backtrace", "group": "kind", "severity": "medium", "match": ["@\\d+: (/\\S*?/(ssh))\\s*\\n[^\\n]*--- signal=(\\d+)"], "title": "El servidor SSH («ssh») se cayó (señal {3})", "detail": "ssh atiende las conexiones SSH entrantes. Su caída no reinicia el router ni afecta el tráfico, pero genera un autosupout y rota el anterior a autosupout.old.rif. Lo vimos en varios RB4011 con v6.45 y v6.46, en general mientras atendía una conexión entrante.", "recommend": "Restringir SSH a las redes de gestión (`/ip service set ssh address=...`) para que no lo alcancen escaneos de Internet, y actualizar RouterOS. Si se repite en la versión actual, reportarlo a MikroTik con el supout.", "doc": "https://manual.mikrotik.com/docs/cli-reference/ip/service.md"}, {"id": "bt-process-login", "scope": "backtrace", "group": "kind", "severity": "medium", "match": ["@\\d+: (/\\S*?(login))\\s*\\n[^\\n]*--- signal=(\\d+)"], "title": "El proceso «login» se cayó (señal {3})", "detail": "login atiende los inicios de sesión de consola (SSH, Telnet, terminal). Su caída no reinicia el router y el sistema lo vuelve a levantar, pero genera un autosupout y rota el anterior a autosupout.old.rif.", "recommend": "Revisar si hay scripts o sistemas de monitoreo que entran por SSH con mucha frecuencia (mirá el log, topic `account`). Si se repite en la última versión, reportarlo a MikroTik con el supout.", "doc": "https://manual.mikrotik.com/docs/authentication-authorization-accounting/user.md"}, {"id": "bt-process-signal", "scope": "backtrace", "group": "kind", "severity": "medium", "match": ["@\\d+: (/\\S*?([^/\\s]+))\\s*\\n[^\\n]*--- signal=(\\d+)"], "title": "El proceso «{2}» se cayó (señal {3})", "detail": "{1} terminó con la señal {3} (11 = acceso inválido a memoria, 6 = abort, 4 = instrucción ilegal). Un proceso caído normalmente se reinicia solo, sin reiniciar el router. Procesos con crash en este bloque: {count}.", "recommend": "Si se repite en la versión actual, abrir un ticket con MikroTik adjuntando el supout."}, {"id": "bt-process-garbled", "scope": "backtrace", "group": "kind", "severity": "medium", "match": ["--- signal=(\\d+)", "/nova/bin/"], "title": "Varios procesos se cayeron a la vez (volcados mezclados)", "detail": "Varios procesos escribieron su volcado al mismo tiempo y las líneas quedaron mezcladas, así que no se puede separar cada uno. Pasa cuando se cae un proceso central (por ejemplo loader) y arrastra a los demás.", "recommend": "Buscar en el historial, en el mismo segundo, la caída que lo originó."}, {"id": "bt-process", "scope": "backtrace", "group": "kind", "severity": "high", "match": ["\\S"], "not": ["winbox version", "had panic"], "title": "Crash de un proceso de RouterOS", "detail": "Un proceso del sistema terminó de forma anormal. Mirá el bloque crudo para identificarlo.", "recommend": "Si se repite, abrir un ticket con MikroTik adjuntando el supout."}, {"id": "log-unclean", "scope": "log", "severity": "high", "match": ["router was rebooted without proper shutdown"], "title": "Reinicio sin apagado ordenado ({count} en el log)", "detail": "El equipo no se apagó de forma normal. Si el supout tiene eventos en la sección oops, fue un crash del kernel; si no, suele ser un corte de energía o un cuelgue de hardware.", "recommend": ""}, {"id": "log-kernel-failure", "scope": "log", "severity": "high", "match": ["kernel failure in previous boot"], "title": "RouterOS registró una falla del kernel en el arranque anterior", "detail": "Confirma que el reinicio fue por un crash del kernel y no por un corte de energía.", "recommend": ""}, {"id": "log-watchdog", "scope": "log", "severity": "high", "icase": true, "match": ["^(?!.*ping watchdog).*watchdog.*$"], "title": "Mensajes del watchdog en el log ({count})", "detail": "Ejemplo: {0}. El watchdog timer reinicia el equipo si el sistema deja de responder durante un minuto (según MikroTik, suele ser por hardware, sobrecarga o mala configuración). Un reinicio por watchdog no genera autosupout.", "recommend": "", "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/watchdog.md"}, {"id": "log-ping-watchdog", "scope": "log", "severity": "high", "match": ["System rebooted because of ping watchdog timeout"], "title": "Reinicio por ping watchdog ({count})", "detail": "El router se reinició porque la dirección configurada en watch-address dejó de responder 6 pings seguidos. No es un crash y no genera autosupout. Si la dirección sigue caída, el equipo se vuelve a reiniciar cada ~6 minutos.", "recommend": "Revisar `/system/watchdog print`: que watch-address sea una dirección confiable y que ping-start-after-boot alcance para que el enlace se levante.", "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/watchdog.md"}, {"id": "log-radius-timeout", "scope": "log", "severity": "medium", "min_count": 5, "match": ["authentication failed - radius timeout"], "title": "{count} autenticaciones PPP fallaron por timeout de RADIUS", "detail": "Cada falla provoca reconexiones en ráfaga, o sea muchas altas y bajas de interfaces PPP. Esa rotación puede disparar bugs en la liberación de interfaces.", "recommend": "Subir el timeout de /radius (por ejemplo a 1–3 s) y revisar la latencia y la carga del servidor RADIUS.", "doc": "https://manual.mikrotik.com/docs/cli-reference/radius.md"}, {"id": "log-oom", "scope": "log", "severity": "high", "icase": true, "match": ["out of memory|not enough memory"], "title": "Falta de memoria en el log ({count})", "detail": "", "recommend": "Revisar consumo de memoria."}, {"id": "log-health", "scope": "log", "severity": "high", "match": ["^.*health,(?:\\w+,)*(?:critical|error|warning)\\b.*$"], "title": "Alertas de hardware (temperatura, ventiladores o alimentación): {count}", "detail": "Ejemplo: {0}", "recommend": "Revisar la sección health, la alimentación y la ventilación."}, {"id": "log-ntp-jump", "scope": "log", "severity": "info", "match": ["ntp change time (\\S+ \\S+) => (\\S+ \\S+)"], "title": "El reloj se corrigió por NTP después del arranque", "detail": "Saltó de {1} a {2}. Las horas del log anteriores a ese ajuste (incluida la del reinicio) no son confiables; usá el uptime.", "recommend": ""}, {"id": "log-firewall-flood", "scope": "log", "severity": "medium", "match": ["^.*firewall,info.*$"], "min_ratio": 0.5, "title": "El log está saturado por el firewall ({count} líneas)", "detail": "El log en memoria guarda 1000 líneas por defecto y las reglas de firewall con log=yes las están ocupando. Los eventos importantes (reinicios, errores, caídas) quedan desplazados y se pierden antes de llegar al supout.", "recommend": "Sacar `log=yes` de las reglas que más disparan, o mandar el topic firewall a otro destino (`/system/logging` con su propia action, por ejemplo a disco o a un syslog remoto).", "doc": "https://manual.mikrotik.com/docs/cli-reference/system/logging.md"}, {"id": "log-account-flood", "scope": "log", "severity": "low", "match": ["^.*logged (?:in|out) from.*$"], "min_ratio": 0.5, "title": "El log está ocupado por inicios de sesión ({count} líneas)", "detail": "Más de la mitad del log son entradas y salidas de usuarios, normalmente de un sistema de monitoreo o backup que entra por SSH o API cada pocos minutos. El log en memoria guarda 1000 líneas por defecto, así que cubre muy poco tiempo y los eventos previos al problema se pierden.", "recommend": "Excluir el topic account del log en memoria (`/system logging set [find topics=info] topics=info,!account`) o mandarlo a otro destino; también se puede subir `memory-lines` en `/system logging action`.", "doc": "https://manual.mikrotik.com/docs/cli-reference/system/logging.md"}, {"id": "log-ppp-flood", "scope": "log", "severity": "low", "match": ["^.*\\b(?:pppoe|ppp|l2tp|pptp|sstp|ovpn),[^ \\t]*.*$"], "min_ratio": 0.6, "title": "El log está ocupado por conexiones PPP ({count} líneas)", "detail": "Casi todo el log son conexiones y desconexiones de sesiones PPP. Con muchos usuarios, las 1000 líneas del log en memoria se llenan en minutos (después de un reinicio, en lo que tardan en reconectar), y los mensajes del arranque y de lo que pasó antes quedan desplazados.", "recommend": "Sacar los topics de PPP del log en memoria (`/system logging set [find topics=info] topics=info,!pppoe,!ppp`) y mandarlos a un syslog remoto o a disco con su propia regla.", "doc": "https://manual.mikrotik.com/docs/cli-reference/system/logging.md"}, {"id": "oops-conntrack-full", "scope": "oops", "severity": "medium", "match": ["nf_conntrack: table full, dropping packet"], "title": "La tabla de conexiones se llenó antes de los crashes ({count} avisos)", "detail": "Los mensajes del kernel previos a los crashes muestran la tabla de connection tracking llena: el router descartaba conexiones nuevas. Indica un pico de conexiones (muchos usuarios, un ataque o un escaneo) que pone al equipo bajo mucha carga justo cuando falla.", "recommend": "Revisar `/ip firewall connection tracking print` (total-entries contra max-entries), bajar los timeouts, descartar conexiones invalid y buscar orígenes con demasiadas conexiones.", "doc": "https://manual.mikrotik.com/docs/firewall-and-quality-of-service/connection-tracking.md"}, {"id": "oops-dst-cache-overflow", "scope": "oops", "severity": "medium", "match": ["dst cache overflow"], "title": "Desborde del route cache del kernel ({count} avisos)", "detail": "«dst cache overflow» significa que se llenó el route cache del kernel de v6 (una entrada por destino activo). Aparece con mucho tráfico hacia muchos destinos distintos, por ejemplo durante un ataque o un escaneo, y suele venir junto con la tabla de conexiones llena. El kernel de v7 ya no tiene route cache.", "recommend": "Buscar el origen del pico de tráfico. En v6 el route cache se controla en `/ip settings` (route-cache); a largo plazo, pasar a v7.", "doc": "https://manual.mikrotik.com/docs/cli-reference/ip/settings.md"}, {"id": "debug-backtrace-loop", "scope": "debug", "severity": "medium", "match": ["^\\S+@\\d+: \\[SIGNAL [0-9a-fA-F]+\\][ \\t]*$"], "min_count": 100, "title": "El proceso que guarda los crashes entró en un bucle de errores ({count} señales)", "detail": "En el registro interno (.debug) del proceso backtrace, que guarda los crashes y escribe el autosupout, la línea «[SIGNAL …]» se repite miles de veces en una fracción de segundo, justo después de la última caída. Si el archivo quedó incompleto, lo más probable es que haya sido por esto.", "recommend": "Tomar como causa la última caída del historial. Si se repite, actualizar RouterOS y mencionarlo en el ticket a MikroTik."}, {"id": "debug-memory-pressure", "scope": "debug", "severity": "info", "min_count": 3, "match": ["checkForFreeMemory"], "title": "Mensajes internos de control de memoria en .debug ({count})", "detail": "El registro interno muestra 'checkForFreeMemory' seguido de 'flusing queue' (RouterOS vacía colas de mensajes internos). Su significado no está documentado. En las muestras solo aparece en v6, incluso con memoria libre de sobra, así que tomalo como contexto y no como diagnóstico.", "recommend": "Si coincide con caídas o lentitud, revisar la memoria (`/system/resource print`) y el tamaño de la tabla de conexiones."}, {"id": "cfg-radius-timeout", "scope": "export", "severity": "medium", "match": ["^/radius add [^\\n]*\\btimeout=(\\d{1,3}|10\\d\\d)ms"], "title": "Timeout de RADIUS bajo ({1} ms; el valor por defecto es 1100 ms)", "detail": "El timeout se bajó por debajo del valor por defecto de RouterOS (1100 ms). Si RADIUS tarda más de {1} ms, la autenticación falla y el cliente reintenta enseguida, lo que genera más altas y bajas de sesiones PPP.", "recommend": "Volver al valor por defecto o subirlo: `/radius set [find] timeout=1100ms` (o 2s si el servidor está lejos o cargado).", "doc": "https://manual.mikrotik.com/docs/cli-reference/radius.md"}, {"id": "cfg-sniffer-stale", "scope": "export", "severity": "medium", "match": ["^/tool sniffer set [^\\n]*filter-interface=(\\*[0-9A-Fa-f]+)"], "title": "Sniffer configurado sobre una interfaz inexistente ({1})", "detail": "Los identificadores con * son interfaces que ya no existen. Por el número alto, seguramente era una interfaz PPP dinámica. Si el sniffer está corriendo, mantiene referencias a interfaces.", "recommend": "Verificar que no esté corriendo (`/tool sniffer print`) y limpiar el filtro: `/tool sniffer set filter-interface=\"\"`", "doc": "https://manual.mikrotik.com/docs/cli-reference/tool/sniffer.md"}, {"id": "cfg-stale-iface", "scope": "export", "severity": "low", "match": ["^(/[^\\n]*?) (?:add|set)(?: [^\\n]*)? interface=(\\*[0-9A-Fa-f]+)"], "title": "Referencias a interfaces inexistentes ({count})", "detail": "Por ejemplo, en {1} hay interface={2}. Son restos de interfaces borradas.", "recommend": "Limpiar esas entradas."}, {"id": "cfg-ppp-ipv6pd", "scope": "export", "severity": "info", "requires": ["ppp-netdev-lockup"], "match": ["^/ppp profile [^\\n]*dhcpv6-pd-pool="], "title": "Posible factor: las sesiones PPP entregan IPv6 (DHCPv6-PD)", "detail": "Cada sesión crea direcciones, rutas y vecinos IPv6 asociados a la interfaz PPP. En Linux, las referencias de IPv6 pendientes son una causa frecuente de 'waiting for … to become free'. Es una hipótesis para validar, no algo confirmado.", "recommend": "Mencionarlo en el ticket a MikroTik. Si es viable, probar un período sin PD en un perfil de prueba.", "doc": "https://manual.mikrotik.com/docs/cli-reference/ppp/profile.md"}, {"id": "cfg-bfd-all", "scope": "export", "severity": "info", "requires": ["ppp-netdev-lockup", "netdev-lockup"], "match": ["^/routing bfd configuration add [^\\n]*interfaces=all"], "title": "Posible factor: BFD habilitado en todas las interfaces", "detail": "Con interfaces=all, BFD también aplica a cada interfaz PPP dinámica. Si no se usa BFD (OSPF está deshabilitado), es una referencia innecesaria.", "recommend": "Limitar BFD a las interfaces que lo necesitan, o deshabilitarlo si no se usa.", "doc": "https://manual.mikrotik.com/docs/cli-reference/routing/bfd/configuration.md"}, {"id": "cfg-traffic-flow", "scope": "export", "severity": "info", "requires": ["ppp-netdev-lockup", "netdev-lockup"], "match": ["^/ip traffic-flow set [^\\n]*enabled=yes"], "title": "Posible factor: traffic-flow activo", "detail": "Traffic-flow guarda flujos asociados a interfaces, incluidas las PPP.", "recommend": "Probar limitar traffic-flow a las interfaces de uplink.", "doc": "https://manual.mikrotik.com/docs/cli-reference/ip/traffic-flow.md"}, {"id": "cfg-graphing-all", "scope": "export", "severity": "low", "requires": ["bt-process-graphing"], "match": ["^/tool graphing interface add(?![^\\n]*interface=)"], "title": "Graphing está graficando todas las interfaces", "detail": "La regla de `/tool graphing interface` no indica interfaz, y por defecto es `all`: grafica todas, incluidas las deshabilitadas, `lo` y las dinámicas (por ejemplo cada usuario PPPoE). En equipos con muchas interfaces eso aumenta el trabajo del proceso graphing, que en este equipo se está cayendo.", "recommend": "Reemplazarla por reglas solo para las interfaces que se necesitan (uplinks), o quitarla si no se usan los gráficos.", "doc": "https://manual.mikrotik.com/docs/cli-reference/tool/graphing/interface.md"}, {"id": "hw-firmware-outdated", "scope": "routerboard", "severity": "low", "match": ["current-firmware: (\\S+)\\s*\\n\\s*upgrade-firmware: (\\S+)"], "not": ["current-firmware: (\\S+)\\s*\\n\\s*upgrade-firmware: \\1[ \\t]*$"], "title": "RouterBOOT desactualizado: {1} (disponible {2})", "detail": "El firmware RouterBOOT no se actualiza solo al actualizar RouterOS: hay que aplicarlo a mano y reiniciar. Un RouterBOOT viejo con un RouterOS nuevo no suele causar caídas, pero MikroTik pide tenerlos alineados antes de reportar un problema.", "recommend": "`/system routerboard upgrade` y reiniciar en una ventana de mantenimiento. Para que sea automático: `/system routerboard settings set auto-upgrade=yes`.", "doc": "https://manual.mikrotik.com/docs/cli-reference/system/routerboard/upgrade.md", "version_lt": [1, 2]}, {"id": "hw-firmware-newer", "scope": "routerboard", "severity": "info", "match": ["current-firmware: (\\S+)\\s*\\n\\s*upgrade-firmware: (\\S+)"], "version_lt": [2, 1], "title": "RouterBOOT más nuevo que RouterOS: {1} con RouterOS {2}", "detail": "El firmware RouterBOOT es de una versión posterior al RouterOS instalado. Suele pasar al volver de v7 a v6: RouterOS se baja, pero RouterBOOT queda en la versión más nueva. Normalmente funciona, pero conviene tenerlo en cuenta (y mencionarlo) si hay problemas de arranque o de hardware.", "recommend": "Si el equipo funciona bien no hace falta tocarlo. Si hay problemas de arranque, mencionarlo en el ticket a MikroTik.", "doc": "https://manual.mikrotik.com/docs/cli-reference/system/routerboard/upgrade.md"}]};
+</script>
+<script>
+(function () {
+  var reports = [], current = 0;
+  var LABEL = { critical: "CRÍTICO", high: "ALTO", medium: "MEDIO", low: "BAJO", info: "INFO" };
+  var drop = document.getElementById("drop"), input = document.getElementById("file");
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? Math.round(n / 1024) + " KB" : n + " B"; }
+  function codeify(s) { return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>"); }
+
+  drop.addEventListener("click", function () { input.click(); });
+  drop.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") input.click(); });
+  input.addEventListener("change", function () { load(input.files); input.value = ""; });
+  ["dragenter", "dragover"].forEach(function (ev) { document.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { document.addEventListener(ev, function (e) { e.preventDefault(); if (ev === "drop" || e.target === document.documentElement) drop.classList.remove("over"); }); });
+  document.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files.length) load(e.dataTransfer.files); });
+
+  async function load(files) {
+    var firstNew = reports.length, out = document.getElementById("out");
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      out.innerHTML = '<div class="card"><p class="empty">Decodificando ' + esc(f.name) + "…</p></div>";
+      try {
+        var sections = await SupoutEngine.decodeFile(await f.text(), null, function (n, tot, name) {
+          out.innerHTML = '<div class="card"><p class="empty">Decodificando ' + esc(f.name) + "… sección " + n + " de " + tot + " (" + esc(name) + ")</p></div>";
+        });
+        reports.push(SupoutEngine.analyze(f.name, sections, RULES.rules));
+        current = reports.length - 1;
+      } catch (err) {
+        out.innerHTML = '<div class="card"><p class="empty">No se pudo leer ' + esc(f.name) + ": " + esc(err.message) + "</p></div>";
+        return;
+      }
+    }
+    current = firstNew;
+    drop.classList.add("compact");
+    render();
+  }
+
+  function finding(f) {
+    return '<div class="finding f-' + f.severity + '"><div class="t"><span class="sev sev-' + f.severity + '">' + LABEL[f.severity] + "</span>" + esc(f.title) + "</div>" +
+      (f.detail ? '<div class="d">' + esc(f.detail) + "</div>" : "") +
+      (f.recommend ? '<div class="r">' + codeify(f.recommend) + "</div>" : "") +
+      (f.doc ? '<div class="doc"><a href="' + esc(f.doc.replace(/\.md$/, "")) + '" target="_blank" rel="noopener">Ver en el manual de MikroTik ↗</a></div>' : "") + "</div>";
+  }
+
+  function verdict(r) {
+    var t = r.trigger, c = r.crashes[0];
+    if (t.kind === "kernel-crash" && c && c.findings.length) {
+      var f = c.findings[0], same = r.crashes.filter(function (x) { return x.findings[0] && x.findings[0].id === f.id; }).length;
+      return '<div class="card verdict"><h2>Motivo del supout: reinicio por crash del kernel</h2><p class="big">' + esc(f.title) + "</p>" +
+        "<p>" + esc(f.detail) + "</p>" +
+        '<p class="muted">Crash registrado ' + esc(c.time || "?") + " (hora del kernel) · RouterOS " + esc(c.version || "?") + " · llevaba " + esc(c.uptime || "?") + " encendido" +
+        (same > 1 ? " · <b>el mismo patrón aparece en " + same + " de " + r.crashes.length + " crashes registrados</b>" : "") + "</p>" +
+        (f.recommend ? '<div class="finding f-info"><div class="r">' + codeify(f.recommend) + "</div></div>" : "") + "</div>";
+    }
+    var bad = t.kind === "kernel-crash" || t.kind === "unclean";
+    var ev = (t.kind === "process" || t.kind === "winbox") ? r.backtraces.filter(function (e) { return e.time === t.event_time; })[0] : null;
+    var same = ev ? r.backtraces.filter(function (e) { return e.findings[0] && e.findings[0].title === ev.findings[0].title; }).length : 0;
+    return '<div class="card verdict ' + (bad ? "" : "ok") + '"><h2>Motivo del supout</h2><p class="big">' + esc(t.title) + "</p><p>" + esc(t.detail) + "</p>" +
+      (same > 1 ? '<p class="muted"><b>La misma falla aparece ' + same + " veces en el historial.</b></p>" : "") +
+      (ev ? finding(ev.findings[0]) : "") + "</div>";
+  }
+
+  function render() {
+    var tabs = document.getElementById("tabs");
+    tabs.innerHTML = reports.length > 1 ? reports.map(function (r, i) {
+      return '<button class="' + (i === current ? "on" : "") + '" data-i="' + i + '">' + esc(r.file) + "</button>";
+    }).join("") : "";
+    tabs.querySelectorAll("button").forEach(function (b) { b.onclick = function () { current = +b.dataset.i; render(); }; });
+
+    var r = reports[current], d = r.device, h = "";
+    var dev = [["Identidad", d.identity], ["Modelo", d.model], ["N.º de serie", d.serial], ["RouterOS", d.version], ["Firmware", d.firmware],
+      ["Generado", (d.date || "?") + (d.timezone ? " · " + d.timezone : "")], ["Uptime al generar", d.uptime], ["Memoria libre / total", d.memory],
+      ["CPU", d.cpu], ["Sesiones PPP activas", d.ppp_active]];
+    h += '<div class="card"><div class="tools" style="justify-content:space-between;margin-bottom:12px"><h2 class="h2">Equipo</h2>' +
+      '<button class="btn" id="copy">Copiar resumen para ticket</button></div><div class="device">' +
+      dev.filter(function (x) { return x[1] != null && x[1] !== ""; }).map(function (x) { return "<div><span>" + x[0] + "</span><b>" + esc(x[1]) + "</b></div>"; }).join("") + "</div></div>";
+
+    h += r.general_findings.map(function (f) { return '<div class="card">' + finding(f) + "</div>"; }).join("");
+    h += verdict(r);
+
+    var hist = r.trigger.kind !== "kernel-crash" && r.crashes.length;
+    h += '<div class="card"><h2>Crashes del kernel (' + r.crashes.length + ")" + (hist ? " · anteriores, no explican este supout" : "") + "</h2>";
+    if (!r.crashes.length) h += '<p class="empty">La sección oops está vacía.</p>';
+    r.crashes.forEach(function (c) {
+      var meta = [];
+      if (c.process) meta.push("proceso <code>" + esc(c.process) + "</code>");
+      if (c.workqueue) meta.push("función <code>" + esc(c.workqueue) + "</code>");
+      if (c.modules.length) meta.push("módulo " + c.modules.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", "));
+      if (c.functions.length) meta.push("traza <code>" + c.functions.slice(0, 4).map(esc).join(" ← ") + "</code>");
+      h += '<div class="crash"><h3>#' + c.index + " · " + esc(c.time || "?") + ' <span class="muted">(hora del kernel)</span></h3>' +
+        '<div class="meta">RouterOS ' + esc(c.version || "?") + (c.uptime ? " · uptime al crash <b>" + esc(c.uptime) + "</b>" : "") + (meta.length ? " · " + meta.join(" · ") : "") + "</div>" +
+        c.repeated.map(function (x) { return '<div class="rep"><b>×' + x.count + "</b>  " + esc(x.msg) + "</div>"; }).join("") +
+        c.findings.map(finding).join("") +
+        "<details><summary>Ver volcado completo del kernel</summary><pre>" + esc(c.text) + "</pre></details></div>";
+    });
+    h += "</div>";
+
+    var lf = r.log_findings, cf = r.config_findings;
+    h += '<div class="grid2"><div class="card"><h2>Log y registros internos</h2>' + (lf.length ? lf.map(finding).join("") : '<p class="empty">Sin hallazgos.</p>') + "</div>" +
+      '<div class="card"><h2>Configuración</h2>' + (cf.length ? cf.map(finding).join("") : '<p class="empty">Sin hallazgos.</p>') + "</div></div>";
+
+    if (r.backtraces.length) {
+      h += '<div class="card"><h2>Historial de fallas registradas (' + r.backtraces.length + ' eventos)</h2><table><tr><th>Fecha</th><th>Versión</th><th>Evento</th></tr>' +
+        r.backtraces.slice().sort(function (a, b) { return (b.time || "") < (a.time || "") ? -1 : 1; }).map(function (b) {
+          var f = b.findings[0] || { severity: "info", title: "?" };
+          return '<tr><td class="mono">' + esc(b.time || "?") + '</td><td class="mono">' + esc(b.version) + '</td><td><span class="sev sev-' + f.severity + '">' + LABEL[f.severity] + "</span>" + esc(f.title) + (b.boot === "current" ? ' <span class="muted">· arranque actual</span>' : "") + (b.pending ? ' <span class="muted">· solo en .debug</span>' : "") +
+            '<details><summary>Ver bloque</summary><pre>' + esc(b.text) + "</pre></details></td></tr>";
+        }).join("") + "</table></div>";
+    }
+
+    if (r.critical_log.length) {
+      h += '<div class="card"><h2>Líneas críticas del log</h2><pre>' + esc(r.critical_log.join("\n")) + "</pre></div>";
+    }
+    if (r.health) h += '<div class="card"><h2>Health (sensores)</h2><pre>' + esc(r.health) + "</pre></div>";
+
+    h += '<div class="card"><h2>Secciones (' + r.sections.length + ')</h2><div class="browser"><div class="seclist" id="seclist">' +
+      r.sections.map(function (s, i) { return '<button data-i="' + i + '">' + esc(s.name || "(sin nombre)") + "<span>" + (s.truncated ? "⚠ " : "") + fmtSize(s.text.length) + "</span></button>"; }).join("") +
+      '</div><div><div class="tools"><input type="search" id="q" placeholder="Filtrar líneas (texto o /regex/)…"><button class="btn" id="dl">Descargar</button></div>' +
+      '<div class="muted" id="secinfo" style="margin-top:6px">Elegí una sección.</div><pre id="sectext" style="max-height:560px"></pre></div></div></div>';
+
+    document.getElementById("out").innerHTML = h;
+    document.getElementById("copy").onclick = copySummary;
+    setupBrowser(r);
+  }
+
+  function setupBrowser(r) {
+    var sel = -1, list = document.getElementById("seclist"), q = document.getElementById("q");
+    function show() {
+      var s = r.sections[sel], pre = document.getElementById("sectext"), info = document.getElementById("secinfo");
+      if (!s) return;
+      var term = q.value.trim(), lines = s.text.split("\n"), re = null;
+      if (term) {
+        try { re = /^\/.+\/$/.test(term) ? new RegExp(term.slice(1, -1), "i") : new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"); } catch (e) { re = null; }
+      }
+      var shown = re ? lines.filter(function (l) { return re.test(l); }) : lines;
+      var LIMIT = 20000, cut = shown.length > LIMIT;
+      shown = shown.slice(0, LIMIT);
+      var html = esc(shown.join("\n"));
+      if (re && term.length > 1) {
+        var hre = new RegExp("(" + (/^\/.+\/$/.test(term) ? term.slice(1, -1) : term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + ")", "gi");
+        try { html = html.replace(hre, "<mark>$1</mark>"); } catch (e) {}
+      }
+      pre.innerHTML = html;
+      info.textContent = (s.name || "(sin nombre)") + " · " + lines.length.toLocaleString("es") + " líneas" +
+        (re ? " · " + (cut ? "más de " + LIMIT : shown.length) + " coincidencias" : "") + (cut ? " · mostrando las primeras " + LIMIT.toLocaleString("es") : "");
+    }
+    list.querySelectorAll("button").forEach(function (b) {
+      b.onclick = function () {
+        list.querySelectorAll("button.on").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on"); sel = +b.dataset.i; show();
+      };
+    });
+    var t; q.oninput = function () { clearTimeout(t); t = setTimeout(show, 200); };
+    document.getElementById("dl").onclick = function () {
+      var s = r.sections[sel]; if (!s) return;
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([s.text], { type: "text/plain" }));
+      a.download = r.file.replace(/\.rif$/i, "") + "_" + (s.name || "seccion").replace(/[^\w.-]/g, "_") + ".txt";
+      a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    };
+    var oops = r.sections.findIndex(function (s) { return s.name === "oops"; });
+    if (oops >= 0) list.querySelectorAll("button")[oops].click();
+  }
+
+  function copySummary() {
+    var r = reports[current], d = r.device, L = [];
+    L.push("Equipo: " + [d.identity, d.model, d.serial && "S/N " + d.serial].filter(Boolean).join(" · "));
+    L.push("RouterOS " + (d.version || "?") + " · firmware " + (d.firmware || "?") + " · archivo " + r.file);
+    L.push("");
+    r.crashes.forEach(function (c) {
+      L.push("Crash #" + c.index + " — " + (c.time || "?") + " (kernel) · RouterOS " + c.version + " · uptime " + c.uptime);
+      if (c.findings[0]) L.push("  " + c.findings[0].title);
+      if (c.panic) L.push("  Kernel panic: " + c.panic);
+      if (c.workqueue) L.push("  Función: " + c.workqueue + (c.modules.length ? " [" + c.modules.join(", ") + "]" : ""));
+      c.repeated.slice(0, 1).forEach(function (x) { L.push("  ×" + x.count + " " + x.msg); });
+    });
+    var other = r.log_findings.concat(r.config_findings).filter(function (f) { return f.severity !== "info"; });
+    if (other.length) { L.push(""); L.push("Otros hallazgos:"); other.forEach(function (f) { L.push("  - " + f.title); }); }
+    var txt = L.join("\n"), btn = document.getElementById("copy");
+    navigator.clipboard.writeText(txt).then(function () { btn.textContent = "Copiado ✓"; }, function () { btn.textContent = "No se pudo copiar"; });
+    setTimeout(function () { btn.textContent = "Copiar resumen para ticket"; }, 2000);
+  }
+})();
+</script>
+</body>
+</html>

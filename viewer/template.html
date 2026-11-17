@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supout Viewer</title>
+<style>
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #1c1d1f; --muted: #6b6e74; --line: #e3e3de;
+  --accent: #2b5fd9; --code: #f1f1ec;
+  --critical: #c2261d; --critical-bg: #fde9e7; --high: #c45a10; --high-bg: #fdf0e4;
+  --medium: #9a7400; --medium-bg: #fbf4dc; --low: #1d7a8c; --low-bg: #e4f4f6; --info: #6b6e74; --info-bg: #efefeb;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141517; --panel: #1d1f22; --ink: #e8e8e4; --muted: #9a9ca1; --line: #2e3034;
+    --accent: #7ea2ff; --code: #17181a;
+    --critical: #ff7b72; --critical-bg: #3a1a18; --high: #f0a05a; --high-bg: #35251a;
+    --medium: #e3c35a; --medium-bg: #322c16; --low: #6cc7d6; --low-bg: #16302f; --info: #9a9ca1; --info-bg: #26282b;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+header.top { padding: 20px 24px 0; max-width: 1180px; margin: 0 auto; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.top h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+header.top .sub { color: var(--muted); font-size: 13px; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px 24px 60px; }
+#drop { border: 2px dashed var(--line); border-radius: 12px; padding: 34px 20px; text-align: center; color: var(--muted); background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s; }
+#drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+#drop strong { color: var(--ink); }
+#drop.compact { padding: 12px; font-size: 13px; }
+.tabs { display: flex; gap: 6px; margin: 18px 0 0; flex-wrap: wrap; }
+.tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 16px; }
+.card > h2, .h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+.device { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 20px; }
+.device div span { display: block; font-size: 12px; color: var(--muted); }
+.device div b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.verdict { border-left: 5px solid var(--critical); }
+.verdict.ok { border-left-color: var(--low); }
+.verdict .big { font-size: 19px; font-weight: 650; margin: 0 0 6px; letter-spacing: -.01em; }
+.verdict p { margin: 4px 0; }
+.finding { border-radius: 9px; padding: 10px 12px; margin: 8px 0; background: var(--info-bg); }
+.finding .t { font-weight: 600; }
+.finding .d { margin-top: 3px; font-size: 14px; }
+.finding .r { margin-top: 5px; font-size: 14px; }
+.finding .doc { margin-top: 5px; font-size: 13px; }
+.finding .doc a { color: var(--accent); text-decoration: none; }
+.finding .doc a:hover { text-decoration: underline; }
+.finding .r::before { content: "→ "; color: var(--muted); }
+.finding code, .r code { font-family: var(--mono); font-size: 12.5px; }
+.sev { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 1px 7px; border-radius: 99px; margin-right: 6px; vertical-align: 1px; color: #fff; }
+.sev-critical { background: var(--critical); } .f-critical { background: var(--critical-bg); }
+.sev-high { background: var(--high); } .f-high { background: var(--high-bg); }
+.sev-medium { background: var(--medium); } .f-medium { background: var(--medium-bg); }
+.sev-low { background: var(--low); } .f-low { background: var(--low-bg); }
+.sev-info { background: var(--info); } .f-info { background: var(--info-bg); }
+@media (prefers-color-scheme: dark) { .sev { color: #141517; } }
+.crash { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+.crash:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.crash h3 { margin: 0; font-size: 15px; }
+.meta { color: var(--muted); font-size: 13px; margin: 3px 0 6px; }
+.meta code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.rep { font-family: var(--mono); font-size: 12.5px; background: var(--code); border-radius: 6px; padding: 6px 9px; margin: 6px 0; overflow-x: auto; white-space: nowrap; }
+.rep b { color: var(--high); }
+details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 6px; }
+pre { font-family: var(--mono); font-size: 12px; line-height: 1.45; background: var(--code); border-radius: 8px; padding: 12px; overflow: auto; max-height: 520px; margin: 8px 0 0; white-space: pre; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+td, th { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+.browser { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+@media (max-width: 720px) { .browser { grid-template-columns: 1fr; } }
+.seclist { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.seclist button { display: flex; justify-content: space-between; width: 100%; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); text-align: left; padding: 6px 10px; font: 13px var(--mono); cursor: pointer; }
+.seclist button span { color: var(--muted); font-size: 11px; }
+.seclist button.on { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input[type=search] { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 14px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 7px 12px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.muted { color: var(--muted); font-size: 13px; }
+mark { background: #ffe066; color: #000; border-radius: 2px; }
+.empty { color: var(--muted); font-size: 14px; }
+.privacy { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Supout Viewer</h1>
+  <span class="sub">Diagnóstico de reinicios en archivos supout.rif / autosupout.rif de MikroTik RouterOS</span>
+</header>
+<main>
+  <div id="drop" tabindex="0" role="button">
+    <strong>Arrastrá uno o más archivos .rif acá</strong> o hacé clic para elegirlos
+    <input id="file" type="file" accept=".rif" multiple hidden>
+  </div>
+  <div class="privacy">Todo se procesa en este navegador. Los archivos no se suben a ningún lado.</div>
+  <div class="tabs" id="tabs"></div>
+  <div id="out"></div>
+</main>
+
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+var RULES = /*__RULES__*/;
+</script>
+<script>
+(function () {
+  var reports = [], current = 0;
+  var LABEL = { critical: "CRÍTICO", high: "ALTO", medium: "MEDIO", low: "BAJO", info: "INFO" };
+  var drop = document.getElementById("drop"), input = document.getElementById("file");
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? Math.round(n / 1024) + " KB" : n + " B"; }
+  function codeify(s) { return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>"); }
+
+  drop.addEventListener("click", function () { input.click(); });
+  drop.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") input.click(); });
+  input.addEventListener("change", function () { load(input.files); input.value = ""; });
+  ["dragenter", "dragover"].forEach(function (ev) { document.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { document.addEventListener(ev, function (e) { e.preventDefault(); if (ev === "drop" || e.target === document.documentElement) drop.classList.remove("over"); }); });
+  document.addEventListener("drop", function (e) { if (e.dataTransfer && e.dataTransfer.files.length) load(e.dataTransfer.files); });
+
+  async function load(files) {
+    var firstNew = reports.length, out = document.getElementById("out");
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      out.innerHTML = '<div class="card"><p class="empty">Decodificando ' + esc(f.name) + "…</p></div>";
+      try {
+        var sections = await SupoutEngine.decodeFile(await f.text(), null, function (n, tot, name) {
+          out.innerHTML = '<div class="card"><p class="empty">Decodificando ' + esc(f.name) + "… sección " + n + " de " + tot + " (" + esc(name) + ")</p></div>";
+        });
+        reports.push(SupoutEngine.analyze(f.name, sections, RULES.rules));
+        current = reports.length - 1;
+      } catch (err) {
+        out.innerHTML = '<div class="card"><p class="empty">No se pudo leer ' + esc(f.name) + ": " + esc(err.message) + "</p></div>";
+        return;
+      }
+    }
+    current = firstNew;
+    drop.classList.add("compact");
+    render();
+  }
+
+  function finding(f) {
+    return '<div class="finding f-' + f.severity + '"><div class="t"><span class="sev sev-' + f.severity + '">' + LABEL[f.severity] + "</span>" + esc(f.title) + "</div>" +
+      (f.detail ? '<div class="d">' + esc(f.detail) + "</div>" : "") +
+      (f.recommend ? '<div class="r">' + codeify(f.recommend) + "</div>" : "") +
+      (f.doc ? '<div class="doc"><a href="' + esc(f.doc.replace(/\.md$/, "")) + '" target="_blank" rel="noopener">Ver en el manual de MikroTik ↗</a></div>' : "") + "</div>";
+  }
+
+  function verdict(r) {
+    var t = r.trigger, c = r.crashes[0];
+    if (t.kind === "kernel-crash" && c && c.findings.length) {
+      var f = c.findings[0], same = r.crashes.filter(function (x) { return x.findings[0] && x.findings[0].id === f.id; }).length;
+      return '<div class="card verdict"><h2>Motivo del supout: reinicio por crash del kernel</h2><p class="big">' + esc(f.title) + "</p>" +
+        "<p>" + esc(f.detail) + "</p>" +
+        '<p class="muted">Crash registrado ' + esc(c.time || "?") + " (hora del kernel) · RouterOS " + esc(c.version || "?") + " · llevaba " + esc(c.uptime || "?") + " encendido" +
+        (same > 1 ? " · <b>el mismo patrón aparece en " + same + " de " + r.crashes.length + " crashes registrados</b>" : "") + "</p>" +
+        (f.recommend ? '<div class="finding f-info"><div class="r">' + codeify(f.recommend) + "</div></div>" : "") + "</div>";
+    }
+    var bad = t.kind === "kernel-crash" || t.kind === "unclean";
+    var ev = (t.kind === "process" || t.kind === "winbox") ? r.backtraces.filter(function (e) { return e.time === t.event_time; })[0] : null;
+    var same = ev ? r.backtraces.filter(function (e) { return e.findings[0] && e.findings[0].title === ev.findings[0].title; }).length : 0;
+    return '<div class="card verdict ' + (bad ? "" : "ok") + '"><h2>Motivo del supout</h2><p class="big">' + esc(t.title) + "</p><p>" + esc(t.detail) + "</p>" +
+      (same > 1 ? '<p class="muted"><b>La misma falla aparece ' + same + " veces en el historial.</b></p>" : "") +
+      (ev ? finding(ev.findings[0]) : "") + "</div>";
+  }
+
+  function render() {
+    var tabs = document.getElementById("tabs");
+    tabs.innerHTML = reports.length > 1 ? reports.map(function (r, i) {
+      return '<button class="' + (i === current ? "on" : "") + '" data-i="' + i + '">' + esc(r.file) + "</button>";
+    }).join("") : "";
+    tabs.querySelectorAll("button").forEach(function (b) { b.onclick = function () { current = +b.dataset.i; render(); }; });
+
+    var r = reports[current], d = r.device, h = "";
+    var dev = [["Identidad", d.identity], ["Modelo", d.model], ["N.º de serie", d.serial], ["RouterOS", d.version], ["Firmware", d.firmware],
+      ["Generado", (d.date || "?") + (d.timezone ? " · " + d.timezone : "")], ["Uptime al generar", d.uptime], ["Memoria libre / total", d.memory],
+      ["CPU", d.cpu], ["Sesiones PPP activas", d.ppp_active]];
+    h += '<div class="card"><div class="tools" style="justify-content:space-between;margin-bottom:12px"><h2 class="h2">Equipo</h2>' +
+      '<button class="btn" id="copy">Copiar resumen para ticket</button></div><div class="device">' +
+      dev.filter(function (x) { return x[1] != null && x[1] !== ""; }).map(function (x) { return "<div><span>" + x[0] + "</span><b>" + esc(x[1]) + "</b></div>"; }).join("") + "</div></div>";
+
+    h += r.general_findings.map(function (f) { return '<div class="card">' + finding(f) + "</div>"; }).join("");
+    h += verdict(r);
+
+    var hist = r.trigger.kind !== "kernel-crash" && r.crashes.length;
+    h += '<div class="card"><h2>Crashes del kernel (' + r.crashes.length + ")" + (hist ? " · anteriores, no explican este supout" : "") + "</h2>";
+    if (!r.crashes.length) h += '<p class="empty">La sección oops está vacía.</p>';
+    r.crashes.forEach(function (c) {
+      var meta = [];
+      if (c.process) meta.push("proceso <code>" + esc(c.process) + "</code>");
+      if (c.workqueue) meta.push("función <code>" + esc(c.workqueue) + "</code>");
+      if (c.modules.length) meta.push("módulo " + c.modules.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", "));
+      if (c.functions.length) meta.push("traza <code>" + c.functions.slice(0, 4).map(esc).join(" ← ") + "</code>");
+      h += '<div class="crash"><h3>#' + c.index + " · " + esc(c.time || "?") + ' <span class="muted">(hora del kernel)</span></h3>' +
+        '<div class="meta">RouterOS ' + esc(c.version || "?") + (c.uptime ? " · uptime al crash <b>" + esc(c.uptime) + "</b>" : "") + (meta.length ? " · " + meta.join(" · ") : "") + "</div>" +
+        c.repeated.map(function (x) { return '<div class="rep"><b>×' + x.count + "</b>  " + esc(x.msg) + "</div>"; }).join("") +
+        c.findings.map(finding).join("") +
+        "<details><summary>Ver volcado completo del kernel</summary><pre>" + esc(c.text) + "</pre></details></div>";
+    });
+    h += "</div>";
+
+    var lf = r.log_findings, cf = r.config_findings;
+    h += '<div class="grid2"><div class="card"><h2>Log y registros internos</h2>' + (lf.length ? lf.map(finding).join("") : '<p class="empty">Sin hallazgos.</p>') + "</div>" +
+      '<div class="card"><h2>Configuración</h2>' + (cf.length ? cf.map(finding).join("") : '<p class="empty">Sin hallazgos.</p>') + "</div></div>";
+
+    if (r.backtraces.length) {
+      h += '<div class="card"><h2>Historial de fallas registradas (' + r.backtraces.length + ' eventos)</h2><table><tr><th>Fecha</th><th>Versión</th><th>Evento</th></tr>' +
+        r.backtraces.slice().sort(function (a, b) { return (b.time || "") < (a.time || "") ? -1 : 1; }).map(function (b) {
+          var f = b.findings[0] || { severity: "info", title: "?" };
+          return '<tr><td class="mono">' + esc(b.time || "?") + '</td><td class="mono">' + esc(b.version) + '</td><td><span class="sev sev-' + f.severity + '">' + LABEL[f.severity] + "</span>" + esc(f.title) + (b.boot === "current" ? ' <span class="muted">· arranque actual</span>' : "") + (b.pending ? ' <span class="muted">· solo en .debug</span>' : "") +
+            '<details><summary>Ver bloque</summary><pre>' + esc(b.text) + "</pre></details></td></tr>";
+        }).join("") + "</table></div>";
+    }
+
+    if (r.critical_log.length) {
+      h += '<div class="card"><h2>Líneas críticas del log</h2><pre>' + esc(r.critical_log.join("\n")) + "</pre></div>";
+    }
+    if (r.health) h += '<div class="card"><h2>Health (sensores)</h2><pre>' + esc(r.health) + "</pre></div>";
+
+    h += '<div class="card"><h2>Secciones (' + r.sections.length + ')</h2><div class="browser"><div class="seclist" id="seclist">' +
+      r.sections.map(function (s, i) { return '<button data-i="' + i + '">' + esc(s.name || "(sin nombre)") + "<span>" + (s.truncated ? "⚠ " : "") + fmtSize(s.text.length) + "</span></button>"; }).join("") +
+      '</div><div><div class="tools"><input type="search" id="q" placeholder="Filtrar líneas (texto o /regex/)…"><button class="btn" id="dl">Descargar</button></div>' +
+      '<div class="muted" id="secinfo" style="margin-top:6px">Elegí una sección.</div><pre id="sectext" style="max-height:560px"></pre></div></div></div>';
+
+    document.getElementById("out").innerHTML = h;
+    document.getElementById("copy").onclick = copySummary;
+    setupBrowser(r);
+  }
+
+  function setupBrowser(r) {
+    var sel = -1, list = document.getElementById("seclist"), q = document.getElementById("q");
+    function show() {
+      var s = r.sections[sel], pre = document.getElementById("sectext"), info = document.getElementById("secinfo");
+      if (!s) return;
+      var term = q.value.trim(), lines = s.text.split("\n"), re = null;
+      if (term) {
+        try { re = /^\/.+\/$/.test(term) ? new RegExp(term.slice(1, -1), "i") : new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"); } catch (e) { re = null; }
+      }
+      var shown = re ? lines.filter(function (l) { return re.test(l); }) : lines;
+      var LIMIT = 20000, cut = shown.length > LIMIT;
+      shown = shown.slice(0, LIMIT);
+      var html = esc(shown.join("\n"));
+      if (re && term.length > 1) {
+        var hre = new RegExp("(" + (/^\/.+\/$/.test(term) ? term.slice(1, -1) : term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + ")", "gi");
+        try { html = html.replace(hre, "<mark>$1</mark>"); } catch (e) {}
+      }
+      pre.innerHTML = html;
+      info.textContent = (s.name || "(sin nombre)") + " · " + lines.length.toLocaleString("es") + " líneas" +
+        (re ? " · " + (cut ? "más de " + LIMIT : shown.length) + " coincidencias" : "") + (cut ? " · mostrando las primeras " + LIMIT.toLocaleString("es") : "");
+    }
+    list.querySelectorAll("button").forEach(function (b) {
+      b.onclick = function () {
+        list.querySelectorAll("button.on").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on"); sel = +b.dataset.i; show();
+      };
+    });
+    var t; q.oninput = function () { clearTimeout(t); t = setTimeout(show, 200); };
+    document.getElementById("dl").onclick = function () {
+      var s = r.sections[sel]; if (!s) return;
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([s.text], { type: "text/plain" }));
+      a.download = r.file.replace(/\.rif$/i, "") + "_" + (s.name || "seccion").replace(/[^\w.-]/g, "_") + ".txt";
+      a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    };
+    var oops = r.sections.findIndex(function (s) { return s.name === "oops"; });
+    if (oops >= 0) list.querySelectorAll("button")[oops].click();
+  }
+
+  function copySummary() {
+    var r = reports[current], d = r.device, L = [];
+    L.push("Equipo: " + [d.identity, d.model, d.serial && "S/N " + d.serial].filter(Boolean).join(" · "));
+    L.push("RouterOS " + (d.version || "?") + " · firmware " + (d.firmware || "?") + " · archivo " + r.file);
+    L.push("");
+    r.crashes.forEach(function (c) {
+      L.push("Crash #" + c.index + " — " + (c.time || "?") + " (kernel) · RouterOS " + c.version + " · uptime " + c.uptime);
+      if (c.findings[0]) L.push("  " + c.findings[0].title);
+      if (c.panic) L.push("  Kernel panic: " + c.panic);
+      if (c.workqueue) L.push("  Función: " + c.workqueue + (c.modules.length ? " [" + c.modules.join(", ") + "]" : ""));
+      c.repeated.slice(0, 1).forEach(function (x) { L.push("  ×" + x.count + " " + x.msg); });
+    });
+    var other = r.log_findings.concat(r.config_findings).filter(function (f) { return f.severity !== "info"; });
+    if (other.length) { L.push(""); L.push("Otros hallazgos:"); other.forEach(function (f) { L.push("  - " + f.title); }); }
+    var txt = L.join("\n"), btn = document.getElementById("copy");
+    navigator.clipboard.writeText(txt).then(function () { btn.textContent = "Copiado ✓"; }, function () { btn.textContent = "No se pudo copiar"; });
+    setTimeout(function () { btn.textContent = "Copiar resumen para ticket"; }, 2000);
+  }
+})();
+</script>
+</body>
+</html>

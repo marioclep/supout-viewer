@@ -1,0 +1,612 @@
+{
+  "_doc": "Reglas de diagnóstico compartidas por supout.py y supout-viewer.html. scope: crash (cada evento de la sección oops), backtrace (cada bloque), log, debug (sección .debug), export (config normalizada: '/ruta add|set ...' por línea), routerboard (sección routerboard; los hallazgos van a los generales), oops (la sección oops entera; los hallazgos van a Log y registros). match: todas deben coincidir; not: ninguna debe coincidir; group: dentro de un mismo objetivo solo gana la primera regla del grupo; requires: solo aplica si se disparó alguna de esas reglas; min_count: mínimo de apariciones del primer patrón. Placeholders: {count}, {1}, {2}... (grupos del primer patrón). Usar regex compatibles Python/JS. doc: URL opcional al manual de MikroTik. min_ratio: fracción mínima de líneas del texto que deben coincidir con el primer patrón. version_lt: [a, b] — solo aplica si la versión del grupo a es menor que la del grupo b del primer patrón.",
+  "rules": [
+    {
+      "id": "masquerade-conntrack-lockup",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "CPU#(\\d+) stuck for (\\d+)s! \\[([^\\]]+)\\]",
+        "nf_ct_iterate_cleanup",
+        "ipt_MASQUERADE",
+        "__inet_del_ifa"
+      ],
+      "title": "CPU {1} bloqueada {2}s limpiando conexiones de masquerade",
+      "detail": "Cuando una interfaz pierde su IP (por ejemplo, al cerrarse una sesión PPP), RouterOS borra de la tabla de conexiones todas las que pasaron por masquerade en esa interfaz, y para eso recorre la tabla entera. Con la tabla muy grande o llena y muchas desconexiones juntas, esa limpieza tuvo una CPU ocupada más de 20 s y el detector de bloqueos del kernel forzó el panic. No fue el watchdog de RouterOS.",
+      "recommend": "En las reglas NAT con IP pública fija, usar `action=src-nat to-addresses=...` en lugar de `masquerade`: así no se dispara la limpieza al caer una interfaz. Además, achicar la tabla de conexiones (timeouts más cortos, descartar conexiones invalid) y revisar si hubo un pico de conexiones.",
+      "doc": "https://manual.mikrotik.com/docs/firewall-and-quality-of-service/firewall/nat.md"
+    },
+    {
+      "id": "ppp-netdev-lockup",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "unregister_netdevice: waiting for (<?ppp[^\\s>]*>?) to become free\\. Usage count = (\\d+)",
+        "soft lockup|rcu_sched self-detected stall|hung task"
+      ],
+      "title": "Bloqueo del kernel al liberar una interfaz PPP ({1})",
+      "detail": "Al cerrarse una sesión, el kernel intentó eliminar la interfaz {1}, pero algo seguía usándola (usage count = {2}). El proceso de ppp_generic quedó esperando, una CPU se bloqueó más de 20 s y el kernel hizo panic y reinició el equipo. No fue el watchdog de RouterOS (/system/watchdog): fue el detector de bloqueos del propio kernel, que provoca un kernel panic, y RouterOS guarda el volcado en el autosupout.",
+      "recommend": "Abrir un ticket con MikroTik adjuntando este supout. Bajar la rotación de sesiones PPPoE (ver avisos de RADIUS). Revisar qué funciones quedan asociadas a interfaces PPP (IPv6/DHCPv6-PD, BFD, sniffer/torch, traffic-flow) y probar otra rama de RouterOS (long-term).",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "netdev-lockup",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "unregister_netdevice: waiting for (\\S+) to become free\\. Usage count = (\\d+)"
+      ],
+      "title": "Bloqueo del kernel al liberar la interfaz {1}",
+      "detail": "El kernel no pudo eliminar la interfaz {1} porque seguía en uso (usage count = {2}). Quedó esperando hasta que el watchdog forzó el reinicio. No fue el watchdog de RouterOS (/system/watchdog): fue el detector de bloqueos del propio kernel, que provoca un kernel panic, y RouterOS guarda el volcado en el autosupout.",
+      "recommend": "Abrir un ticket con MikroTik adjuntando el supout. Revisar qué configuración hace referencia a esa interfaz.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "oom",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "invoked oom-killer|Out of memory"
+      ],
+      "title": "Sin memoria (OOM)",
+      "detail": "El kernel se quedó sin memoria RAM y empezó a matar procesos.",
+      "recommend": "Revisar consumo de memoria (address-lists, conexiones, colas, contenedores) y la sección resource/.proc.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "hard-lockup",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "hard LOCKUP"
+      ],
+      "title": "Hard lockup de CPU",
+      "detail": "Una CPU dejó de responder incluso a interrupciones. Puede ser un problema de hardware o un bug grave del kernel.",
+      "recommend": "Revisar temperatura y alimentación (sección health). Abrir un ticket con MikroTik.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "kernel-memfault",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "Unable to handle kernel (NULL pointer dereference|paging request)"
+      ],
+      "title": "Fallo de acceso a memoria en el kernel ({1})",
+      "detail": "El kernel accedió a una dirección inválida. Es un bug del kernel o de un driver.",
+      "recommend": "Fijarse en el módulo de la traza de llamadas, abrir un ticket con MikroTik y probar otra versión.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "soft-lockup",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "high",
+      "match": [
+        "soft lockup - CPU#(\\d+) stuck for (\\d+)s! \\[([^\\]]+)\\]"
+      ],
+      "title": "CPU {1} bloqueada {2}s (proceso {3})",
+      "detail": "Un proceso del kernel monopolizó la CPU y el detector de bloqueos del kernel forzó el panic. No fue el watchdog de RouterOS (/system/watchdog): fue el detector de bloqueos del propio kernel, que provoca un kernel panic, y RouterOS guarda el volcado en el autosupout.",
+      "recommend": "Fijarse en el módulo de la traza de llamadas y abrir un ticket con MikroTik.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "hung-task",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "high",
+      "match": [
+        "blocked for more than (\\d+) seconds"
+      ],
+      "title": "Tarea del kernel bloqueada más de {1}s",
+      "detail": "Un proceso quedó esperando un recurso que nunca se liberó.",
+      "recommend": "Revisar la traza de llamadas. Suele relacionarse con almacenamiento o drivers.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "kernel-bug",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "high",
+      "match": [
+        "(Internal error: Oops[^\\n]*|kernel BUG at[^\\n]*|BUG: [^\\n]*)"
+      ],
+      "title": "Error interno del kernel",
+      "detail": "{1}",
+      "recommend": "Abrir un ticket con MikroTik adjuntando el supout.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "tilera-sched-udivdi3",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "Kernel took bad trap \\d+ \\(([^)]+)\\) at PC \\S+ __udivdi3",
+        "find_busiest_group"
+      ],
+      "title": "Crash del scheduler del kernel (__udivdi3 en find_busiest_group)",
+      "detail": "El kernel falló ({1}) haciendo una división dentro de find_busiest_group, la parte del scheduler que reparte la carga entre CPUs. No apunta a ninguna función de red ni a la configuración. Es la misma firma en dos CCR1036 distintos con v6 (Tilera), así que es un bug del kernel de esa plataforma y no algo de este equipo en particular.",
+      "recommend": "Actualizar a la última v6 long-term o pasar a v7 (los CCR1036 la soportan, con su kernel nuevo). Si se repite en una versión actual, abrir un ticket con MikroTik adjuntando el supout.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "kernel-bad-trap",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "critical",
+      "match": [
+        "Kernel took bad trap (\\d+) \\(([^)]+)\\) at PC \\S+ ([A-Za-z_]\\w*)"
+      ],
+      "title": "Excepción del kernel: {2} en {3}",
+      "detail": "El kernel ejecutó una operación inválida ({2}) dentro de la función {3} y se detuvo. Es el formato de crash de los CCR con CPU Tilera (RouterOS v6/v7). Mirá las funciones de la traza para ver qué subsistema estaba activo.",
+      "recommend": "Si se repite, abrir un ticket con MikroTik adjuntando el supout. Si ocurrió en una versión vieja y no volvió a pasar, probablemente ya esté corregido.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "panic-generic",
+      "scope": "crash",
+      "group": "cause",
+      "severity": "high",
+      "match": [
+        "Kernel panic - not syncing: ([^\\n]*)"
+      ],
+      "title": "Kernel panic: {1}",
+      "detail": "El kernel entró en panic. Ninguna regla específica reconoció la causa.",
+      "recommend": "Revisar el detalle crudo del evento.",
+      "doc": "https://manual.mikrotik.com/docs/getting-started/supout-rif.md"
+    },
+    {
+      "id": "bt-winbox",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "info",
+      "match": [
+        "winbox version: ?(\\S+)"
+      ],
+      "title": "Crash de WinBox {1} en una PC (no afecta al router)",
+      "detail": "El cliente WinBox se colgó en una PC con Windows y envió el reporte al router. No es un reinicio del equipo.",
+      "recommend": "Actualizar WinBox si se repite."
+    },
+    {
+      "id": "bt-panic",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "info",
+      "match": [
+        "had panic"
+      ],
+      "title": "Marca de kernel panic",
+      "detail": "Hubo un kernel panic. El detalle está en los eventos de crash (sección oops).",
+      "recommend": ""
+    },
+    {
+      "id": "bt-process-loader",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "high",
+      "match": [
+        "@\\d+: (/\\S*?(loader))\\s*\\n[^\\n]*--- signal=(\\d+)"
+      ],
+      "title": "Se cayó «loader», el proceso que supervisa a los demás (señal {3})",
+      "detail": "loader arranca y vigila al resto de los procesos de RouterOS. Cuando se cae, arrastra a los demás: los otros crashes registrados en el mismo segundo (casi siempre con señal 6, abort) son consecuencia de esta caída y no fallas independientes.",
+      "recommend": "Tomarlo como una falla de todo el sistema. Revisar la memoria libre en ese momento y actualizar RouterOS; si se repite en la versión actual, abrir un ticket con MikroTik adjuntando el supout."
+    },
+    {
+      "id": "bt-process-graphing",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "medium",
+      "match": [
+        "@\\d+: (/\\S*?(graphing))\\s*\\n[^\\n]*--- signal=(\\d+)"
+      ],
+      "title": "El proceso «graphing» se cayó (señal {3})",
+      "detail": "graphing es el proceso que genera los gráficos de /tool/graphing (tráfico, CPU, colas). Su caída no reinicia el router, pero cada caída genera un autosupout nuevo y rota el anterior a autosupout.old.rif, con lo que puede pisar el de un reinicio real.",
+      "recommend": "Si no usás los gráficos, quitar las reglas de `/tool/graphing` (interface, queue, resource). Si se repite en la última versión, reportarlo a MikroTik.",
+      "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/graphing.md"
+    },
+    {
+      "id": "bt-process-graphing-logtail",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "medium",
+      "match": [
+        "backtrace: 0x",
+        "(?:writeChangesToStore|IFACE UPDATE)"
+      ],
+      "not": [
+        "@\\d+: /\\S+\\s*\\n[^\\n]*--- signal="
+      ],
+      "title": "El proceso «graphing» se cayó",
+      "detail": "graphing es el proceso que genera los gráficos de /tool/graphing (tráfico, CPU, colas). Su caída no reinicia el router, pero cada caída genera un autosupout nuevo y rota el anterior a autosupout.old.rif, con lo que puede pisar el de un reinicio real. Se lo identificó por su registro interno (writeChangesToStore, IFACE UPDATE): el encabezado del crash, con el nombre del proceso y la señal, no quedó en el archivo.",
+      "recommend": "Si no usás los gráficos, quitar las reglas de `/tool/graphing` (interface, queue, resource). Si se repite en la última versión, reportarlo a MikroTik.",
+      "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/graphing.md"
+    },
+    {
+      "id": "bt-process-ssh",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "medium",
+      "match": [
+        "@\\d+: (/\\S*?/(ssh))\\s*\\n[^\\n]*--- signal=(\\d+)"
+      ],
+      "title": "El servidor SSH («ssh») se cayó (señal {3})",
+      "detail": "ssh atiende las conexiones SSH entrantes. Su caída no reinicia el router ni afecta el tráfico, pero genera un autosupout y rota el anterior a autosupout.old.rif. Lo vimos en varios RB4011 con v6.45 y v6.46, en general mientras atendía una conexión entrante.",
+      "recommend": "Restringir SSH a las redes de gestión (`/ip service set ssh address=...`) para que no lo alcancen escaneos de Internet, y actualizar RouterOS. Si se repite en la versión actual, reportarlo a MikroTik con el supout.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/ip/service.md"
+    },
+    {
+      "id": "bt-process-login",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "medium",
+      "match": [
+        "@\\d+: (/\\S*?(login))\\s*\\n[^\\n]*--- signal=(\\d+)"
+      ],
+      "title": "El proceso «login» se cayó (señal {3})",
+      "detail": "login atiende los inicios de sesión de consola (SSH, Telnet, terminal). Su caída no reinicia el router y el sistema lo vuelve a levantar, pero genera un autosupout y rota el anterior a autosupout.old.rif.",
+      "recommend": "Revisar si hay scripts o sistemas de monitoreo que entran por SSH con mucha frecuencia (mirá el log, topic `account`). Si se repite en la última versión, reportarlo a MikroTik con el supout.",
+      "doc": "https://manual.mikrotik.com/docs/authentication-authorization-accounting/user.md"
+    },
+    {
+      "id": "bt-process-signal",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "medium",
+      "match": [
+        "@\\d+: (/\\S*?([^/\\s]+))\\s*\\n[^\\n]*--- signal=(\\d+)"
+      ],
+      "title": "El proceso «{2}» se cayó (señal {3})",
+      "detail": "{1} terminó con la señal {3} (11 = acceso inválido a memoria, 6 = abort, 4 = instrucción ilegal). Un proceso caído normalmente se reinicia solo, sin reiniciar el router. Procesos con crash en este bloque: {count}.",
+      "recommend": "Si se repite en la versión actual, abrir un ticket con MikroTik adjuntando el supout."
+    },
+    {
+      "id": "bt-process-garbled",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "medium",
+      "match": [
+        "--- signal=(\\d+)",
+        "/nova/bin/"
+      ],
+      "title": "Varios procesos se cayeron a la vez (volcados mezclados)",
+      "detail": "Varios procesos escribieron su volcado al mismo tiempo y las líneas quedaron mezcladas, así que no se puede separar cada uno. Pasa cuando se cae un proceso central (por ejemplo loader) y arrastra a los demás.",
+      "recommend": "Buscar en el historial, en el mismo segundo, la caída que lo originó."
+    },
+    {
+      "id": "bt-process",
+      "scope": "backtrace",
+      "group": "kind",
+      "severity": "high",
+      "match": [
+        "\\S"
+      ],
+      "not": [
+        "winbox version",
+        "had panic"
+      ],
+      "title": "Crash de un proceso de RouterOS",
+      "detail": "Un proceso del sistema terminó de forma anormal. Mirá el bloque crudo para identificarlo.",
+      "recommend": "Si se repite, abrir un ticket con MikroTik adjuntando el supout."
+    },
+    {
+      "id": "log-unclean",
+      "scope": "log",
+      "severity": "high",
+      "match": [
+        "router was rebooted without proper shutdown"
+      ],
+      "title": "Reinicio sin apagado ordenado ({count} en el log)",
+      "detail": "El equipo no se apagó de forma normal. Si el supout tiene eventos en la sección oops, fue un crash del kernel; si no, suele ser un corte de energía o un cuelgue de hardware.",
+      "recommend": ""
+    },
+    {
+      "id": "log-kernel-failure",
+      "scope": "log",
+      "severity": "high",
+      "match": [
+        "kernel failure in previous boot"
+      ],
+      "title": "RouterOS registró una falla del kernel en el arranque anterior",
+      "detail": "Confirma que el reinicio fue por un crash del kernel y no por un corte de energía.",
+      "recommend": ""
+    },
+    {
+      "id": "log-watchdog",
+      "scope": "log",
+      "severity": "high",
+      "icase": true,
+      "match": [
+        "^(?!.*ping watchdog).*watchdog.*$"
+      ],
+      "title": "Mensajes del watchdog en el log ({count})",
+      "detail": "Ejemplo: {0}. El watchdog timer reinicia el equipo si el sistema deja de responder durante un minuto (según MikroTik, suele ser por hardware, sobrecarga o mala configuración). Un reinicio por watchdog no genera autosupout.",
+      "recommend": "",
+      "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/watchdog.md"
+    },
+    {
+      "id": "log-ping-watchdog",
+      "scope": "log",
+      "severity": "high",
+      "match": [
+        "System rebooted because of ping watchdog timeout"
+      ],
+      "title": "Reinicio por ping watchdog ({count})",
+      "detail": "El router se reinició porque la dirección configurada en watch-address dejó de responder 6 pings seguidos. No es un crash y no genera autosupout. Si la dirección sigue caída, el equipo se vuelve a reiniciar cada ~6 minutos.",
+      "recommend": "Revisar `/system/watchdog print`: que watch-address sea una dirección confiable y que ping-start-after-boot alcance para que el enlace se levante.",
+      "doc": "https://manual.mikrotik.com/docs/diagnostics-monitoring-and-troubleshooting/watchdog.md"
+    },
+    {
+      "id": "log-radius-timeout",
+      "scope": "log",
+      "severity": "medium",
+      "min_count": 5,
+      "match": [
+        "authentication failed - radius timeout"
+      ],
+      "title": "{count} autenticaciones PPP fallaron por timeout de RADIUS",
+      "detail": "Cada falla provoca reconexiones en ráfaga, o sea muchas altas y bajas de interfaces PPP. Esa rotación puede disparar bugs en la liberación de interfaces.",
+      "recommend": "Subir el timeout de /radius (por ejemplo a 1–3 s) y revisar la latencia y la carga del servidor RADIUS.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/radius.md"
+    },
+    {
+      "id": "log-oom",
+      "scope": "log",
+      "severity": "high",
+      "icase": true,
+      "match": [
+        "out of memory|not enough memory"
+      ],
+      "title": "Falta de memoria en el log ({count})",
+      "detail": "",
+      "recommend": "Revisar consumo de memoria."
+    },
+    {
+      "id": "log-health",
+      "scope": "log",
+      "severity": "high",
+      "match": [
+        "^.*health,(?:\\w+,)*(?:critical|error|warning)\\b.*$"
+      ],
+      "title": "Alertas de hardware (temperatura, ventiladores o alimentación): {count}",
+      "detail": "Ejemplo: {0}",
+      "recommend": "Revisar la sección health, la alimentación y la ventilación."
+    },
+    {
+      "id": "log-ntp-jump",
+      "scope": "log",
+      "severity": "info",
+      "match": [
+        "ntp change time (\\S+ \\S+) => (\\S+ \\S+)"
+      ],
+      "title": "El reloj se corrigió por NTP después del arranque",
+      "detail": "Saltó de {1} a {2}. Las horas del log anteriores a ese ajuste (incluida la del reinicio) no son confiables; usá el uptime.",
+      "recommend": ""
+    },
+    {
+      "id": "log-firewall-flood",
+      "scope": "log",
+      "severity": "medium",
+      "match": [
+        "^.*firewall,info.*$"
+      ],
+      "min_ratio": 0.5,
+      "title": "El log está saturado por el firewall ({count} líneas)",
+      "detail": "El log en memoria guarda 1000 líneas por defecto y las reglas de firewall con log=yes las están ocupando. Los eventos importantes (reinicios, errores, caídas) quedan desplazados y se pierden antes de llegar al supout.",
+      "recommend": "Sacar `log=yes` de las reglas que más disparan, o mandar el topic firewall a otro destino (`/system/logging` con su propia action, por ejemplo a disco o a un syslog remoto).",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/system/logging.md"
+    },
+    {
+      "id": "log-account-flood",
+      "scope": "log",
+      "severity": "low",
+      "match": [
+        "^.*logged (?:in|out) from.*$"
+      ],
+      "min_ratio": 0.5,
+      "title": "El log está ocupado por inicios de sesión ({count} líneas)",
+      "detail": "Más de la mitad del log son entradas y salidas de usuarios, normalmente de un sistema de monitoreo o backup que entra por SSH o API cada pocos minutos. El log en memoria guarda 1000 líneas por defecto, así que cubre muy poco tiempo y los eventos previos al problema se pierden.",
+      "recommend": "Excluir el topic account del log en memoria (`/system logging set [find topics=info] topics=info,!account`) o mandarlo a otro destino; también se puede subir `memory-lines` en `/system logging action`.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/system/logging.md"
+    },
+    {
+      "id": "log-ppp-flood",
+      "scope": "log",
+      "severity": "low",
+      "match": [
+        "^.*\\b(?:pppoe|ppp|l2tp|pptp|sstp|ovpn),[^ \\t]*.*$"
+      ],
+      "min_ratio": 0.6,
+      "title": "El log está ocupado por conexiones PPP ({count} líneas)",
+      "detail": "Casi todo el log son conexiones y desconexiones de sesiones PPP. Con muchos usuarios, las 1000 líneas del log en memoria se llenan en minutos (después de un reinicio, en lo que tardan en reconectar), y los mensajes del arranque y de lo que pasó antes quedan desplazados.",
+      "recommend": "Sacar los topics de PPP del log en memoria (`/system logging set [find topics=info] topics=info,!pppoe,!ppp`) y mandarlos a un syslog remoto o a disco con su propia regla.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/system/logging.md"
+    },
+    {
+      "id": "oops-conntrack-full",
+      "scope": "oops",
+      "severity": "medium",
+      "match": [
+        "nf_conntrack: table full, dropping packet"
+      ],
+      "title": "La tabla de conexiones se llenó antes de los crashes ({count} avisos)",
+      "detail": "Los mensajes del kernel previos a los crashes muestran la tabla de connection tracking llena: el router descartaba conexiones nuevas. Indica un pico de conexiones (muchos usuarios, un ataque o un escaneo) que pone al equipo bajo mucha carga justo cuando falla.",
+      "recommend": "Revisar `/ip firewall connection tracking print` (total-entries contra max-entries), bajar los timeouts, descartar conexiones invalid y buscar orígenes con demasiadas conexiones.",
+      "doc": "https://manual.mikrotik.com/docs/firewall-and-quality-of-service/connection-tracking.md"
+    },
+    {
+      "id": "oops-dst-cache-overflow",
+      "scope": "oops",
+      "severity": "medium",
+      "match": [
+        "dst cache overflow"
+      ],
+      "title": "Desborde del route cache del kernel ({count} avisos)",
+      "detail": "«dst cache overflow» significa que se llenó el route cache del kernel de v6 (una entrada por destino activo). Aparece con mucho tráfico hacia muchos destinos distintos, por ejemplo durante un ataque o un escaneo, y suele venir junto con la tabla de conexiones llena. El kernel de v7 ya no tiene route cache.",
+      "recommend": "Buscar el origen del pico de tráfico. En v6 el route cache se controla en `/ip settings` (route-cache); a largo plazo, pasar a v7.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/ip/settings.md"
+    },
+    {
+      "id": "debug-backtrace-loop",
+      "scope": "debug",
+      "severity": "medium",
+      "match": [
+        "^\\S+@\\d+: \\[SIGNAL [0-9a-fA-F]+\\][ \\t]*$"
+      ],
+      "min_count": 100,
+      "title": "El proceso que guarda los crashes entró en un bucle de errores ({count} señales)",
+      "detail": "En el registro interno (.debug) del proceso backtrace, que guarda los crashes y escribe el autosupout, la línea «[SIGNAL …]» se repite miles de veces en una fracción de segundo, justo después de la última caída. Si el archivo quedó incompleto, lo más probable es que haya sido por esto.",
+      "recommend": "Tomar como causa la última caída del historial. Si se repite, actualizar RouterOS y mencionarlo en el ticket a MikroTik."
+    },
+    {
+      "id": "debug-memory-pressure",
+      "scope": "debug",
+      "severity": "info",
+      "min_count": 3,
+      "match": [
+        "checkForFreeMemory"
+      ],
+      "title": "Mensajes internos de control de memoria en .debug ({count})",
+      "detail": "El registro interno muestra 'checkForFreeMemory' seguido de 'flusing queue' (RouterOS vacía colas de mensajes internos). Su significado no está documentado. En las muestras solo aparece en v6, incluso con memoria libre de sobra, así que tomalo como contexto y no como diagnóstico.",
+      "recommend": "Si coincide con caídas o lentitud, revisar la memoria (`/system/resource print`) y el tamaño de la tabla de conexiones."
+    },
+    {
+      "id": "cfg-radius-timeout",
+      "scope": "export",
+      "severity": "medium",
+      "match": [
+        "^/radius add [^\\n]*\\btimeout=(\\d{1,3}|10\\d\\d)ms"
+      ],
+      "title": "Timeout de RADIUS bajo ({1} ms; el valor por defecto es 1100 ms)",
+      "detail": "El timeout se bajó por debajo del valor por defecto de RouterOS (1100 ms). Si RADIUS tarda más de {1} ms, la autenticación falla y el cliente reintenta enseguida, lo que genera más altas y bajas de sesiones PPP.",
+      "recommend": "Volver al valor por defecto o subirlo: `/radius set [find] timeout=1100ms` (o 2s si el servidor está lejos o cargado).",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/radius.md"
+    },
+    {
+      "id": "cfg-sniffer-stale",
+      "scope": "export",
+      "severity": "medium",
+      "match": [
+        "^/tool sniffer set [^\\n]*filter-interface=(\\*[0-9A-Fa-f]+)"
+      ],
+      "title": "Sniffer configurado sobre una interfaz inexistente ({1})",
+      "detail": "Los identificadores con * son interfaces que ya no existen. Por el número alto, seguramente era una interfaz PPP dinámica. Si el sniffer está corriendo, mantiene referencias a interfaces.",
+      "recommend": "Verificar que no esté corriendo (`/tool sniffer print`) y limpiar el filtro: `/tool sniffer set filter-interface=\"\"`",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/tool/sniffer.md"
+    },
+    {
+      "id": "cfg-stale-iface",
+      "scope": "export",
+      "severity": "low",
+      "match": [
+        "^(/[^\\n]*?) (?:add|set)(?: [^\\n]*)? interface=(\\*[0-9A-Fa-f]+)"
+      ],
+      "title": "Referencias a interfaces inexistentes ({count})",
+      "detail": "Por ejemplo, en {1} hay interface={2}. Son restos de interfaces borradas.",
+      "recommend": "Limpiar esas entradas."
+    },
+    {
+      "id": "cfg-ppp-ipv6pd",
+      "scope": "export",
+      "severity": "info",
+      "requires": [
+        "ppp-netdev-lockup"
+      ],
+      "match": [
+        "^/ppp profile [^\\n]*dhcpv6-pd-pool="
+      ],
+      "title": "Posible factor: las sesiones PPP entregan IPv6 (DHCPv6-PD)",
+      "detail": "Cada sesión crea direcciones, rutas y vecinos IPv6 asociados a la interfaz PPP. En Linux, las referencias de IPv6 pendientes son una causa frecuente de 'waiting for … to become free'. Es una hipótesis para validar, no algo confirmado.",
+      "recommend": "Mencionarlo en el ticket a MikroTik. Si es viable, probar un período sin PD en un perfil de prueba.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/ppp/profile.md"
+    },
+    {
+      "id": "cfg-bfd-all",
+      "scope": "export",
+      "severity": "info",
+      "requires": [
+        "ppp-netdev-lockup",
+        "netdev-lockup"
+      ],
+      "match": [
+        "^/routing bfd configuration add [^\\n]*interfaces=all"
+      ],
+      "title": "Posible factor: BFD habilitado en todas las interfaces",
+      "detail": "Con interfaces=all, BFD también aplica a cada interfaz PPP dinámica. Si no se usa BFD (OSPF está deshabilitado), es una referencia innecesaria.",
+      "recommend": "Limitar BFD a las interfaces que lo necesitan, o deshabilitarlo si no se usa.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/routing/bfd/configuration.md"
+    },
+    {
+      "id": "cfg-traffic-flow",
+      "scope": "export",
+      "severity": "info",
+      "requires": [
+        "ppp-netdev-lockup",
+        "netdev-lockup"
+      ],
+      "match": [
+        "^/ip traffic-flow set [^\\n]*enabled=yes"
+      ],
+      "title": "Posible factor: traffic-flow activo",
+      "detail": "Traffic-flow guarda flujos asociados a interfaces, incluidas las PPP.",
+      "recommend": "Probar limitar traffic-flow a las interfaces de uplink.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/ip/traffic-flow.md"
+    },
+    {
+      "id": "cfg-graphing-all",
+      "scope": "export",
+      "severity": "low",
+      "requires": [
+        "bt-process-graphing"
+      ],
+      "match": [
+        "^/tool graphing interface add(?![^\\n]*interface=)"
+      ],
+      "title": "Graphing está graficando todas las interfaces",
+      "detail": "La regla de `/tool graphing interface` no indica interfaz, y por defecto es `all`: grafica todas, incluidas las deshabilitadas, `lo` y las dinámicas (por ejemplo cada usuario PPPoE). En equipos con muchas interfaces eso aumenta el trabajo del proceso graphing, que en este equipo se está cayendo.",
+      "recommend": "Reemplazarla por reglas solo para las interfaces que se necesitan (uplinks), o quitarla si no se usan los gráficos.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/tool/graphing/interface.md"
+    },
+    {
+      "id": "hw-firmware-outdated",
+      "scope": "routerboard",
+      "severity": "low",
+      "match": [
+        "current-firmware: (\\S+)\\s*\\n\\s*upgrade-firmware: (\\S+)"
+      ],
+      "not": [
+        "current-firmware: (\\S+)\\s*\\n\\s*upgrade-firmware: \\1[ \\t]*$"
+      ],
+      "title": "RouterBOOT desactualizado: {1} (disponible {2})",
+      "detail": "El firmware RouterBOOT no se actualiza solo al actualizar RouterOS: hay que aplicarlo a mano y reiniciar. Un RouterBOOT viejo con un RouterOS nuevo no suele causar caídas, pero MikroTik pide tenerlos alineados antes de reportar un problema.",
+      "recommend": "`/system routerboard upgrade` y reiniciar en una ventana de mantenimiento. Para que sea automático: `/system routerboard settings set auto-upgrade=yes`.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/system/routerboard/upgrade.md",
+      "version_lt": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "hw-firmware-newer",
+      "scope": "routerboard",
+      "severity": "info",
+      "match": [
+        "current-firmware: (\\S+)\\s*\\n\\s*upgrade-firmware: (\\S+)"
+      ],
+      "version_lt": [
+        2,
+        1
+      ],
+      "title": "RouterBOOT más nuevo que RouterOS: {1} con RouterOS {2}",
+      "detail": "El firmware RouterBOOT es de una versión posterior al RouterOS instalado. Suele pasar al volver de v7 a v6: RouterOS se baja, pero RouterBOOT queda en la versión más nueva. Normalmente funciona, pero conviene tenerlo en cuenta (y mencionarlo) si hay problemas de arranque o de hardware.",
+      "recommend": "Si el equipo funciona bien no hace falta tocarlo. Si hay problemas de arranque, mencionarlo en el ticket a MikroTik.",
+      "doc": "https://manual.mikrotik.com/docs/cli-reference/system/routerboard/upgrade.md"
+    }
+  ]
+}

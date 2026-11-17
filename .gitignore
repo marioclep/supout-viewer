@@ -1,0 +1,5 @@
+# Archivos de soporte reales: contienen configuraciones completas y datos de clientes
+*.rif
+muestras/
+.DS_Store
+__pycache__/
